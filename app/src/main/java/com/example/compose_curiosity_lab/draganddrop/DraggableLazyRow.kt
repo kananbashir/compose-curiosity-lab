@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -79,10 +80,36 @@ fun <T: DraggableItem>DraggableLazyRow(
             }
         }
     }
+
+
+    //If an item is picked we assign this item to pickedItem on onDragStart
+    // and we compose the item overlay in order to be able to drag it globally.
+    pickedItem?.let {
+        ItemOverlay(
+            draggableItemContent = { draggableItemContent(it) }
+        )
+    }
+}
+
+
+//We cannot just drag an item from row itself, that is because it has limited bounds.
+//We need to create an item overlay to be able to drag the picked item globally.
+@Composable
+private fun ItemOverlay(
+    modifier: Modifier = Modifier,
+    draggableItemContent: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+    ) {
+        draggableItemContent()
+    }
 }
 
 abstract class DraggableItem(val key: Any) {
-
+    //We want the dragged item to return its start position if it is not
+    // in drop bounds.
+    val startPosition: Offset = Offset.Zero
 }
 
 data class PersonItem(
