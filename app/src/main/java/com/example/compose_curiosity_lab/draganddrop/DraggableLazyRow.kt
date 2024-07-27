@@ -1,6 +1,9 @@
 package com.example.compose_curiosity_lab.draganddrop
 
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector2D
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
@@ -32,6 +36,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -39,6 +45,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.compose_curiosity_lab.R
+import kotlinx.coroutines.launch
 
 @Composable
 fun <T: DraggableItem>DraggableLazyRow(
@@ -48,6 +55,7 @@ fun <T: DraggableItem>DraggableLazyRow(
 ) {
     val rowItems = remember { items.toMutableStateList() }
     var pickedItem: T? by remember { mutableStateOf(null) }
+    val scope = rememberCoroutineScope()
 
     Column(modifier = modifier.fillMaxSize()) {
         LazyRow(
@@ -59,18 +67,31 @@ fun <T: DraggableItem>DraggableLazyRow(
             itemsIndexed(rowItems, key = {_, item -> item.key}) { index, item ->
                 Box(
                     modifier = Modifier
+                        .onGloballyPositioned { coordinates ->
+                            item.startPosition = coordinates.positionInRoot()
+                        }
                         .pointerInput(Unit) {
                             detectDragGesturesAfterLongPress(
                                 onDragStart = {
-                                    pickedItem = item
+                                    scope.launch {
+                                        pickedItem = item
+                                        item.itemOverlayDragPosition.snapTo(item.startPosition)
+                                    }
                                 },
 
                                 onDrag = { _, dragAmount ->
-
+                                    if (pickedItem == item) {
+                                        scope.launch {
+                                            item.itemOverlayDragPosition.snapTo(item.itemOverlayDragPosition.value + dragAmount)
+                                        }
+                                    }
                                 },
 
                                 onDragEnd = {
-                                    pickedItem = null
+                                    scope.launch {
+                                        pickedItem = null
+                                        item.itemOverlayDragPosition.animateTo(item.startPosition)
+                                    }
                                 }
                             )
                         }
@@ -109,7 +130,8 @@ private fun ItemOverlay(
 abstract class DraggableItem(val key: Any) {
     //We want the dragged item to return its start position if it is not
     // in drop bounds.
-    val startPosition: Offset = Offset.Zero
+    var startPosition: Offset = Offset.Zero
+    val itemOverlayDragPosition: Animatable<Offset, AnimationVector2D> = Animatable(Offset.Zero, Offset.VectorConverter)
 }
 
 data class PersonItem(
