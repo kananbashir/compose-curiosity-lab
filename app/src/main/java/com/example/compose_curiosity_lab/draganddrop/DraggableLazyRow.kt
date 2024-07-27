@@ -109,14 +109,14 @@ fun <T: DraggableItem>DraggableLazyRow(
 
     var columnHeight: Float? = remember { null }
 
-    //We assign the height of the draggable item to make sure that the column items sliding down height
-    // will be bigger that the draggable item's height.
+    //We assign the height of the draggable item to make sure that the column items sliding down
+    // will be bigger than the draggable item's height.
     var draggableItemHeight: Float? by remember { mutableStateOf(null) }
 
-    //When the picket item is in drop bounds we add an overlay item to the column. If the picked
-    // item has been moved away from drop bounds we slide the other items to hide this overlay item instead of
+    //When the picket item is in drop bounds, we add an overlay item to the column. If the picked
+    // item has been moved away from drop bounds, we slide the other items to hide this overlay item instead of
     // deleting it and adding new item again if it is in drop bounds again. So, we need to define the
-    // height of the droppable item in order to slide to correct position.
+    // height of the droppable item in order to slide to the correct position.
     var droppableItemHeight: Float? by remember { mutableStateOf(null) }
 
     var isItemPicked by remember { mutableStateOf(false) }
@@ -318,7 +318,7 @@ fun <T: DraggableItem>DraggableLazyRow(
     }
 
 
-    //If an item is picked we assign this item to pickedItem on onDragStart
+    //If an item is picked, we assign this item to pickedItem on onDragStart
     // and we compose the item overlay in order to be able to drag it globally.
     pickedItem?.let {
         ItemOverlay(
@@ -338,7 +338,7 @@ fun <T: DraggableItem>DraggableLazyRow(
 }
 
 
-//We cannot just drag an item from row itself, that is because it has limited bounds.
+//We cannot just drag an item from the row itself because it has limited bounds.
 //We need to create an item overlay to be able to drag the picked item globally.
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -372,7 +372,7 @@ private fun ItemOverlay(
                 if (targetValue == "1.0") {
                     sharedTransitionAnimEndCounter++
 
-                    //When the target value we get from "transition" hits 1.0 twice that means
+                    //When the target value we get from "transition" hits 1.0 twice, that means
                     // that the transition animation has been finished. I didn't find another way to
                     // check the animation state.
                     if (sharedTransitionAnimEndCounter == 2) onTransitionAnimationFinished()
@@ -423,10 +423,10 @@ private fun ItemOverlay(
 }
 
 
-//To safely remove item if the list is not empty
+//To safely remove the item if the list is not empty
 private fun <T: DraggableItem> SnapshotStateList<T>.safeRemoveAt(index: Int) { if (isNotEmpty()) removeAt(index) }
 
-//Extension function to safely add an item to list if the first element is not the same with it.
+//Extension function to safely add an item to the list if the first element is not the same.
 private fun <T: DraggableItem>SnapshotStateList<T>.safeAddToFirstIndex(item: T): Boolean {
     return if (item !in this) {
         if (safeGetFirst()?.droppedItemAlpha?.value == 0f) set(0, item) else add(0, item)
@@ -436,7 +436,7 @@ private fun <T: DraggableItem>SnapshotStateList<T>.safeAddToFirstIndex(item: T):
     }
 }
 
-//Extension function to get the first element of the list if it is not empty
+//Extension function to get the first element of the list if it is not empty.
 private fun <T: DraggableItem>SnapshotStateList<T>.safeGetFirst(): T? { return if (isNotEmpty()) first() else null }
 
 //Extension function when we need to do something only if the animation has been finished.
@@ -452,8 +452,7 @@ private suspend fun <T, V: AnimationVector> Animatable<T, V>.animateWithResult(
 }
 
 abstract class DraggableItem(val key: Any) {
-    //We want the dragged item to return its start position if it is not
-    // in drop bounds.
+    //We want the dragged item to return to its starting position if it is not in drop bounds.
     var startPosition: Offset = Offset.Zero
     val itemOverlayDragPosition: Animatable<Offset, AnimationVector2D> = Animatable(Offset.Zero, Offset.VectorConverter)
     var droppedItemAlpha: MutableState<Float> = mutableFloatStateOf(0f)
