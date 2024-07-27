@@ -2,8 +2,16 @@ package com.example.compose_curiosity_lab.draganddrop
 
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationEndReason
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.AnimationVector
 import androidx.compose.animation.core.AnimationVector2D
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,6 +44,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -42,11 +53,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.compose_curiosity_lab.R
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun <T: DraggableItem>DraggableLazyRow(
     modifier: Modifier = Modifier,
@@ -56,6 +70,8 @@ fun <T: DraggableItem>DraggableLazyRow(
     val rowItems = remember { items.toMutableStateList() }
     var pickedItem: T? by remember { mutableStateOf(null) }
     val scope = rememberCoroutineScope()
+    var isItemPicked by remember { mutableStateOf(false) }
+    var rowScrollEnabled by remember { mutableStateOf(true) }
 
     Column(modifier = modifier.fillMaxSize()) {
         LazyRow(
@@ -65,8 +81,23 @@ fun <T: DraggableItem>DraggableLazyRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             itemsIndexed(rowItems, key = {_, item -> item.key}) { index, item ->
+                val paddingOffset = animateFloatAsState(
+                    targetValue = when {
+                        !isItemPicked -> 0f
+                        index > rowItems.indexOf(pickedItem) -> 100f
+                        else -> -100f
+                    },
+                    label = ""
+                )
+                var itemAlpha by remember { mutableFloatStateOf(1f) }
+
                 Box(
                     modifier = Modifier
+                        .graphicsLayer {
+                            alpha = itemAlpha
+                            if (pickedItem != item) translationX = paddingOffset.value
+                        }
+                        .animateItemPlacement(tween(easing = LinearOutSlowInEasing, durationMillis = 500))
                         .onGloballyPositioned { coordinates ->
                             item.startPosition = coordinates.positionInRoot()
                         }
@@ -74,8 +105,13 @@ fun <T: DraggableItem>DraggableLazyRow(
                             detectDragGesturesAfterLongPress(
                                 onDragStart = {
                                     scope.launch {
-                                        pickedItem = item
-                                        item.itemOverlayDragPosition.snapTo(item.startPosition)
+                                        if (pickedItem == null) {
+                                            pickedItem = item
+                                            isItemPicked = true
+                                            item.itemOverlayDragPosition.snapTo(item.startPosition)
+                                            itemAlpha = 0f
+                                            rowScrollEnabled = false
+                                        }
                                     }
                                 },
 
@@ -89,8 +125,21 @@ fun <T: DraggableItem>DraggableLazyRow(
 
                                 onDragEnd = {
                                     scope.launch {
-                                        pickedItem = null
-                                        item.itemOverlayDragPosition.animateTo(item.startPosition)
+                                        if (pickedItem == item) {
+                                            isItemPicked = false
+                                            item.itemOverlayDragPosition.animateWithResult(
+                                                targetOffset = item.startPosition,
+                                                animationSpec = tween(
+                                                    easing = FastOutSlowInEasing,
+                                                    durationMillis = 500
+                                                ),
+                                                onAnimationEnd = {
+                                                    rowScrollEnabled = false
+                                                    pickedItem = null
+                                                }
+                                            )
+                                            itemAlpha = 1f
+                                        }
                                     }
                                 }
                             )
@@ -107,6 +156,7 @@ fun <T: DraggableItem>DraggableLazyRow(
     // and we compose the item overlay in order to be able to drag it globally.
     pickedItem?.let {
         ItemOverlay(
+            item = it,
             draggableItemContent = { draggableItemContent(it) }
         )
     }
@@ -117,13 +167,33 @@ fun <T: DraggableItem>DraggableLazyRow(
 //We need to create an item overlay to be able to drag the picked item globally.
 @Composable
 private fun ItemOverlay(
+    item: DraggableItem,
     modifier: Modifier = Modifier,
     draggableItemContent: @Composable () -> Unit
 ) {
     Box(
         modifier = Modifier
+            .offset {
+                IntOffset(
+                    item.itemOverlayDragPosition.value.x.roundToInt(),
+                    item.itemOverlayDragPosition.value.y.roundToInt()
+                )
+            }
     ) {
         draggableItemContent()
+    }
+}
+
+
+//Extension function when we need to do something only if the animation has been finished.
+private suspend fun <T, V: AnimationVector> Animatable<T, V>.animateWithResult(
+    targetOffset: T,
+    animationSpec: AnimationSpec<T>,
+    onAnimationEnd: () -> Unit
+) {
+    when (animateTo(targetOffset, animationSpec).endReason) {
+        AnimationEndReason.Finished -> { onAnimationEnd() }
+        else -> {}
     }
 }
 
