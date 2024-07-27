@@ -98,19 +98,16 @@ fun <T: DraggableItem>DraggableLazyRow(
     draggableItemContent: @Composable (item: T) -> Unit,
     droppableItemContent: @Composable (item: T) -> Unit
 ) {
-    val rowItems = remember { items.toMutableStateList() }
-    val columnItems = remember { listOf(items[0]).toMutableStateList() }
-    var pickedItem: T? by remember { mutableStateOf(null) }
     val scope = rememberCoroutineScope()
-    var isItemPicked by remember { mutableStateOf(false) }
-    var isInDropBounds by remember { mutableStateOf(false) }
-    var rowScrollEnabled by remember { mutableStateOf(true) }
     val config = LocalConfiguration.current
     val density = LocalDensity.current
     val screenHeight = remember { with(density) { config.screenHeightDp.toDp().toPx() } }
     val screenWidth = remember { with(density) { config.screenWidthDp.toDp().toPx() } }
+
+    val rowItems = remember { items.toMutableStateList() }
+    val columnItems = remember { listOf(items[0]).toMutableStateList() }
+
     var columnHeight: Float? = remember { null }
-    var isItemDropped: Boolean by remember { mutableStateOf(false) }
 
     //We assign the height of the draggable item to make sure that the column items sliding down height
     // will be bigger that the draggable item's height.
@@ -122,11 +119,21 @@ fun <T: DraggableItem>DraggableLazyRow(
     // height of the droppable item in order to slide to correct position.
     var droppableItemHeight: Float? by remember { mutableStateOf(null) }
 
+    var isItemPicked by remember { mutableStateOf(false) }
+    var isItemDropped: Boolean by remember { mutableStateOf(false) }
+    var isInDropBounds by remember { mutableStateOf(false) }
+    var pickedItem: T? by remember { mutableStateOf(null) }
+
     //The offset of the first item in the column.
     var dropOffset: Offset? by remember { mutableStateOf(null) }
-    val columnItemSpace = remember { Animatable(0f) }
+
+
+    var rowScrollEnabled by remember { mutableStateOf(true) }
     var columnScrollEnabled by remember { mutableStateOf(true) }
+
+    val columnItemSpace = remember { Animatable(0f) }
     val columnState = rememberLazyListState()
+
 
     LaunchedEffect(key1 = isInDropBounds) {
         pickedItem?.let {
@@ -151,9 +158,23 @@ fun <T: DraggableItem>DraggableLazyRow(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
+        Spacer(modifier = Modifier.height(150.dp))
+
+        Text(
+            modifier = Modifier
+                .fillMaxWidth(),
+            text = "Drag and Drop",
+            fontWeight = FontWeight.Bold,
+            fontSize = 35.sp,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(100.dp))
+
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(10.dp),
+            state = state,
+            contentPadding = contentPadding,
             horizontalArrangement = horizontalArrangement,
             verticalAlignment = verticalAlignment,
             userScrollEnabled = rowScrollEnabled,
@@ -281,7 +302,7 @@ fun <T: DraggableItem>DraggableLazyRow(
                             if (index == 0 && dropOffset == null && droppableItemHeight == null) {
                                 //I am getting the offset on the initial launch of the app.
                                 dropOffset = Offset(
-                                    x = screenWidth + 19, //I don't know why but I have to add 19 in order to get the center. I'll fix it later :)
+                                    x = screenWidth + 37, //I don't know why but I have to add 37 in order to get the center. I'll fix it later :)
                                     y = coordinates.positionInRoot().y
                                 )
                                 droppableItemHeight = with(density) { coordinates.size.height.toDp().toPx() }
