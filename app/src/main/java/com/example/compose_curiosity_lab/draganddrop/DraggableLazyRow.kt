@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -149,6 +150,13 @@ fun <T: DraggableItem>DraggableLazyRow(
                 }
             }
         }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+        ) {
+
+        }
     }
 
 
@@ -204,12 +212,14 @@ abstract class DraggableItem(val key: Any) {
     val itemOverlayDragPosition: Animatable<Offset, AnimationVector2D> = Animatable(Offset.Zero, Offset.VectorConverter)
 }
 
-data class PersonItem(
-    val nameAndSurname: String,
-    @DrawableRes val photo: Int,
-    val price: Int
-): DraggableItem(nameAndSurname)
 
+
+
+
+
+
+
+//Preview related things
 @Preview (showBackground = true)
 @Composable
 private fun DraggableLazyRowPreview() {
@@ -224,8 +234,6 @@ private fun DraggableLazyRowPreview() {
     )
 }
 
-
-//Preview related things
 @Composable
 fun MyDraggableItem(
     modifier: Modifier = Modifier,
@@ -271,6 +279,12 @@ fun MyDraggableItem(
         }
     }
 }
+
+data class PersonItem(
+    val nameAndSurname: String,
+    @DrawableRes val photo: Int,
+    val price: Int
+): DraggableItem(nameAndSurname)
 
 val personItems = listOf(
     PersonItem(
