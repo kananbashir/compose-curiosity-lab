@@ -113,7 +113,7 @@ fun <T: DraggableItem>DraggableLazyRow(
     // will be bigger than the draggable item's height.
     var draggableItemHeight: Float? by remember { mutableStateOf(null) }
 
-    //When the picket item is in drop bounds, we add an overlay item to the column. If the picked
+    //When the picked item is in drop bounds, we add an overlay item to the column. If the picked
     // item has been moved away from drop bounds, we slide the other items to hide this overlay item instead of
     // deleting it and adding new item again if it is in drop bounds again. So, we need to define the
     // height of the droppable item in order to slide to the correct position.
