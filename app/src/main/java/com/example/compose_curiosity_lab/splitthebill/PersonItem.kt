@@ -11,5 +11,7 @@ data class PersonItem(
     val id: Int,
     val name: String,
     val surname: String,
-    @DrawableRes val photo: Int
+    @DrawableRes val photo: Int,
+    val requestAmount: Double? = null,
+    val requestAmountCount: Int? = null,
 )

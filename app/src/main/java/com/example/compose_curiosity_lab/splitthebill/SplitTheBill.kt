@@ -2,16 +2,21 @@ package com.example.compose_curiosity_lab.splitthebill
 
 import android.graphics.BlurMaskFilter
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,10 +33,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.toColorInt
 import com.example.compose_curiosity_lab.R
 
 /**
@@ -101,15 +108,58 @@ fun PersonItem(
                 text = item.name,
                 color = Color.Gray
             )
-
-            SplitAmountBubble()
         }
+    }
+
+    item.requestAmount?.let {
+        SplitAmountBubble(item)
     }
 }
 
 @Composable
-fun SplitAmountBubble(modifier: Modifier = Modifier) {
-    
+fun SplitAmountBubble(
+    item: PersonItem,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .wrapContentSize()
+            .padding(start = 40.dp, top = 16.dp)
+            .clip(CircleShape)
+            .background(bubbleColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(Color.White),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    modifier = Modifier
+                        .offset((-0.4).dp , (-1).dp)
+                        .fillMaxWidth(),
+                    text = item.requestAmountCount.toString(),
+                    color = bubbleColor,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Text(
+                modifier = Modifier,
+                text = "$${item.requestAmount.toString()}",
+                color = Color.White,
+                textAlign = TextAlign.Start,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.Light
+            )
+        }
+    }
 }
 
 private fun Modifier.shadow(
@@ -151,6 +201,8 @@ private fun Modifier.shadow(
     }
 )
 
+private val bubbleColor: Color = Color("#195FEB".toColorInt())
+
 
 //-------------------------------- Preview related things --------------------------------
 val personList: List<PersonItem> = listOf(
@@ -172,7 +224,9 @@ val personList: List<PersonItem> = listOf(
         id = 3,
         name = "Sofia",
         surname = "Hernandez",
-        photo = R.drawable.stb_photo_sofia
+        photo = R.drawable.stb_photo_sofia,
+        requestAmount = 20.48,
+        requestAmountCount = 3
     ),
 
     PersonItem(
@@ -186,7 +240,9 @@ val personList: List<PersonItem> = listOf(
         id = 5,
         name = "Olivia",
         surname = "Garcia",
-        photo = R.drawable.stb_photo_olivia
+        photo = R.drawable.stb_photo_olivia,
+        requestAmount = 12.99,
+        requestAmountCount = 2
     ),
 
     PersonItem(
