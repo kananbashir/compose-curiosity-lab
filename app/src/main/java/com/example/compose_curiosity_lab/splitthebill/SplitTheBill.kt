@@ -1,5 +1,6 @@
 package com.example.compose_curiosity_lab.splitthebill
 
+import android.graphics.BlurMaskFilter
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,12 +17,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.compose_curiosity_lab.R
@@ -71,8 +78,15 @@ fun PersonItem(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Image(
                 modifier = Modifier
-                    .padding(start = 10.dp, end = 10.dp, top = 10.dp)
+                    .padding(20.dp)
                     .size(100.dp)
+                    .shadow(
+                        color = Color.Black.copy(alpha = 0.3f),
+                        borderRadius = 70.dp,
+                        blurRadius = 20.dp,
+                        offsetY = 80.dp,
+                        spread = 3.dp
+                    )
                     .clip(RoundedCornerShape(60f)),
                 painter = painterResource(id = item.photo),
                 contentDescription = "Person photo",
@@ -82,6 +96,44 @@ fun PersonItem(
     }
 }
 
+private fun Modifier.shadow(
+    color: Color = Color.Black,
+    borderRadius: Dp = 0.dp,
+    blurRadius: Dp = 0.dp,
+    offsetX: Dp = 0.dp,
+    offsetY: Dp = 0.dp,
+    spread: Dp = 0f.dp,
+    modifier: Modifier = Modifier
+) = this.then(
+    modifier.drawBehind {
+        this.drawIntoCanvas {
+            val paint = Paint()
+            val frameworkPaint = paint.asFrameworkPaint()
+            val spreadPixel = spread.toPx()
+            val leftPixel = (0f - spreadPixel) + offsetX.toPx()
+            val topPixel = (0f - spreadPixel) + offsetY.toPx()
+            val rightPixel = (this.size.width + spreadPixel)
+            val bottomPixel = (this.size.height + spreadPixel)
+
+            if (blurRadius != 0.dp) {
+                frameworkPaint.maskFilter =
+                    (BlurMaskFilter(blurRadius.toPx(), BlurMaskFilter.Blur.NORMAL))
+            }
+
+            frameworkPaint.color = color.toArgb()
+
+            it.drawRoundRect(
+                left = leftPixel,
+                top = topPixel,
+                right = rightPixel,
+                bottom = bottomPixel,
+                radiusX = borderRadius.toPx(),
+                radiusY = borderRadius.toPx(),
+                paint
+            )
+        }
+    }
+)
 
 
 //-------------------------------- Preview related things --------------------------------
