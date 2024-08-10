@@ -88,7 +88,9 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-
+            transactionList.forEach {
+                TransactionItem()
+            }
         }
     }
 }
@@ -132,6 +134,27 @@ fun PersonItem(
 
     item.requestAmount?.let {
         SplitAmountBubble(item)
+    }
+}
+
+@Composable
+fun TransactionItem(
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(35f))
+            .background(transactionItemChipColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+        }
     }
 }
 
@@ -221,6 +244,7 @@ private fun Modifier.shadow(
 )
 
 private val bubbleColor: Color = Color("#195FEB".toColorInt())
+private val transactionItemChipColor: Color = Color("#D0E3FC".toColorInt())
 
 
 //-------------------------------- Preview related things --------------------------------
@@ -283,6 +307,51 @@ val personList: List<PersonItem> = listOf(
         name = "David",
         surname = "Johnson",
         photo = R.drawable.stb_photo_david
+    ),
+)
+
+val transactionList: List<TransactionItem> = listOf(
+    TransactionItem(
+        id = 1,
+        transactionTitle = "Beer",
+        transactionAmount = 9.50,
+        isChecked = false
+    ),
+    TransactionItem(
+        id = 2,
+        transactionTitle = "Chicken",
+        transactionAmount = 14.99,
+        isChecked = false
+    ),
+    TransactionItem(
+        id = 3,
+        transactionTitle = "Coke Zero 2x",
+        transactionAmount = 5.99,
+        isChecked = false
+    ),
+    TransactionItem(
+        id = 4,
+        transactionTitle = "Coffee",
+        transactionAmount = 6.50,
+        isChecked = false
+    ),
+    TransactionItem(
+        id = 5,
+        transactionTitle = "Bacon Blue Cheese Burger (new receipt)",
+        transactionAmount = 7.99,
+        isChecked = false
+    ),
+    TransactionItem(
+        id = 6,
+        transactionTitle = "Fish",
+        transactionAmount = 16.99,
+        isChecked = false
+    ),
+    TransactionItem(
+        id = 7,
+        transactionTitle = "Fries",
+        transactionAmount = 8.50,
+        isChecked = false
     ),
 )
 
