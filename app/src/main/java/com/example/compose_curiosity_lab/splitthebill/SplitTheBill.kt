@@ -2,6 +2,7 @@ package com.example.compose_curiosity_lab.splitthebill
 
 import android.graphics.BlurMaskFilter
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -75,13 +76,16 @@ fun PersonItem(
         modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Image(
                 modifier = Modifier
-                    .padding(20.dp)
+                    .padding(start = 20.dp, end = 20.dp, top = 20.dp)
                     .size(100.dp)
                     .shadow(
-                        color = Color.Black.copy(alpha = 0.3f),
+                        color = Color.Black.copy(alpha = 0.4f),
                         borderRadius = 70.dp,
                         blurRadius = 20.dp,
                         offsetY = 80.dp,
@@ -92,8 +96,20 @@ fun PersonItem(
                 contentDescription = "Person photo",
                 contentScale = ContentScale.Crop
             )
+
+            Text(
+                text = item.name,
+                color = Color.Gray
+            )
+
+            SplitAmountBubble()
         }
     }
+}
+
+@Composable
+fun SplitAmountBubble(modifier: Modifier = Modifier) {
+    
 }
 
 private fun Modifier.shadow(
