@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +20,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -46,6 +49,7 @@ import com.example.compose_curiosity_lab.R
  * @author Kanan Bashir
  */
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SplitTheBill(modifier: Modifier = Modifier) {
     Column(
@@ -70,6 +74,21 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             items(personList, key = { it.name }) { person ->
                 PersonItem(person)
             }
+        }
+
+        HorizontalDivider(
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp ,top = 20.dp),
+            thickness = 0.3.dp
+        )
+
+        FlowRow(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+
         }
     }
 }
@@ -98,7 +117,7 @@ fun PersonItem(
                         offsetY = 80.dp,
                         spread = 3.dp
                     )
-                    .clip(RoundedCornerShape(60f)),
+                    .clip(RoundedCornerShape(90f)),
                 painter = painterResource(id = item.photo),
                 contentDescription = "Person photo",
                 contentScale = ContentScale.Crop
@@ -142,7 +161,7 @@ fun SplitAmountBubble(
             ) {
                 Text(
                     modifier = Modifier
-                        .offset((-0.4).dp , (-1).dp)
+                        .offset((-0.4).dp, (-1).dp)
                         .fillMaxWidth(),
                     text = item.requestAmountCount.toString(),
                     color = bubbleColor,
