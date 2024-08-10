@@ -3,6 +3,7 @@ package com.example.compose_curiosity_lab.splitthebill
 import android.graphics.BlurMaskFilter
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +32,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -84,19 +87,19 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
         FlowRow(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(25.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             transactionList.forEach {
-                TransactionItem()
+                TransactionItem(it)
             }
         }
     }
 }
 
 @Composable
-fun PersonItem(
+private fun PersonItem(
     item: PersonItem,
     modifier: Modifier = Modifier
 ) {
@@ -138,7 +141,8 @@ fun PersonItem(
 }
 
 @Composable
-fun TransactionItem(
+private fun TransactionItem(
+    transactionItem: TransactionItem,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -153,7 +157,37 @@ fun TransactionItem(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            LimitedLengthText(
+                text = transactionItem.transactionTitle,
+                maxChars = 26
+            )
 
+            Text(
+                text = "$${transactionItem.transactionAmount}",
+                fontSize = 18.sp,
+                color = transactionItemChipTitleColor
+            )
+
+            Box(
+                modifier = Modifier
+                    .border(
+                        width = 1.dp,
+                        color = transactionItemChipTitleColor,
+                        shape = RoundedCornerShape(20f)
+                    )
+            ) {
+                Icon(
+                    modifier = Modifier
+                        .graphicsLayer {
+                            alpha = if (transactionItem.isChecked) 1f else 0f
+                        }
+                        .size(19.dp)
+                        .padding(3.4.dp),
+                    painter = painterResource(id = R.drawable.check_circlesvg),
+                    contentDescription = "Transaction item checked state",
+                    tint = transactionItemChipTitleColor
+                )
+            }
         }
     }
 }
@@ -204,6 +238,29 @@ fun SplitAmountBubble(
     }
 }
 
+@Composable
+private fun LimitedLengthText(
+    text: String,
+    maxChars: Int,
+    modifier: Modifier = Modifier
+) {
+    val limitedText = if (text.length > maxChars) {
+        text.take(maxChars)+"..."
+    } else {
+        text
+    }
+
+    Text(
+        modifier = modifier,
+        text = limitedText,
+        maxLines = 1,
+        fontWeight = FontWeight.Bold,
+        fontSize = 18.sp,
+        color = transactionItemChipTitleColor,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
 private fun Modifier.shadow(
     color: Color = Color.Black,
     borderRadius: Dp = 0.dp,
@@ -245,6 +302,7 @@ private fun Modifier.shadow(
 
 private val bubbleColor: Color = Color("#195FEB".toColorInt())
 private val transactionItemChipColor: Color = Color("#D0E3FC".toColorInt())
+private val transactionItemChipTitleColor: Color = Color("#18365B".toColorInt())
 
 
 //-------------------------------- Preview related things --------------------------------
@@ -309,7 +367,6 @@ val personList: List<PersonItem> = listOf(
         photo = R.drawable.stb_photo_david
     ),
 )
-
 val transactionList: List<TransactionItem> = listOf(
     TransactionItem(
         id = 1,
@@ -321,7 +378,7 @@ val transactionList: List<TransactionItem> = listOf(
         id = 2,
         transactionTitle = "Chicken",
         transactionAmount = 14.99,
-        isChecked = false
+        isChecked = true
     ),
     TransactionItem(
         id = 3,
@@ -345,7 +402,7 @@ val transactionList: List<TransactionItem> = listOf(
         id = 6,
         transactionTitle = "Fish",
         transactionAmount = 16.99,
-        isChecked = false
+        isChecked = true
     ),
     TransactionItem(
         id = 7,
