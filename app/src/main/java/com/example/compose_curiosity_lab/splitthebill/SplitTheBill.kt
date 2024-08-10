@@ -1,15 +1,23 @@
 package com.example.compose_curiosity_lab.splitthebill
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -45,12 +53,34 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             columns = GridCells.Fixed(3)
         ) {
             items(personList, key = { it.name }) { person ->
-
+                PersonItem(person)
             }
         }
     }
 }
 
+@Composable
+fun PersonItem(
+    item: PersonItem,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                modifier = Modifier
+                    .padding(start = 10.dp, end = 10.dp, top = 10.dp)
+                    .size(100.dp)
+                    .clip(RoundedCornerShape(60f)),
+                painter = painterResource(id = item.photo),
+                contentDescription = "Person photo",
+                contentScale = ContentScale.Crop
+            )
+        }
+    }
+}
 
 
 
