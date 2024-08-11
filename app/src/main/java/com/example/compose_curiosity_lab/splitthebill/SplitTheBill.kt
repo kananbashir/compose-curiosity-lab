@@ -1,9 +1,12 @@
 package com.example.compose_curiosity_lab.splitthebill
 
 import android.graphics.BlurMaskFilter
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +28,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,9 +62,17 @@ import com.example.compose_curiosity_lab.R
  * @author Kanan Bashir
  */
 
+class ScreenState {
+    var isTransactionItemPicked by mutableStateOf(false)
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SplitTheBill(modifier: Modifier = Modifier) {
+
+    val personItemList = remember { personList.toMutableStateList() }
+    val transactionItemList = remember { transactionList.toMutableStateList() }
+
     Column(
         modifier = modifier.fillMaxSize()
     ) {
@@ -76,7 +92,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                 .fillMaxWidth(),
             columns = GridCells.Fixed(3)
         ) {
-            items(personList, key = { it.name }) { person ->
+            items(personItemList, key = { it.name }) { person ->
                 PersonItem(person)
             }
         }
@@ -93,7 +109,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            transactionList.forEach {
+            transactionItemList.forEach {
                 TransactionItem(it)
             }
         }
@@ -147,10 +163,20 @@ private fun TransactionItem(
     transactionItem: TransactionItem,
     modifier: Modifier = Modifier
 ) {
+    val checkIconAlpha by animateFloatAsState(
+        targetValue = if (transactionItem.isChecked.value) 1f else 0f, label = ""
+    )
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(35f))
-            .background(transactionItemChipColor),
+            .background(transactionItemChipColor)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                transactionItem.isChecked.value = !transactionItem.isChecked.value
+            },
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -185,7 +211,7 @@ private fun TransactionItem(
                 Icon(
                     modifier = Modifier
                         .graphicsLayer {
-                            alpha = if (transactionItem.isChecked) 1f else 0f
+                            this.alpha = checkIconAlpha
                         }
                         .size(19.dp)
                         .padding(3.4.dp),
@@ -393,43 +419,36 @@ val transactionList: List<TransactionItem> = listOf(
         id = 1,
         transactionTitle = "Beer",
         transactionAmount = 9.50,
-        isChecked = false
     ),
     TransactionItem(
         id = 2,
         transactionTitle = "Chicken",
-        transactionAmount = 14.99,
-        isChecked = true
+        transactionAmount = 14.99
     ),
     TransactionItem(
         id = 3,
         transactionTitle = "Coke Zero 2x",
-        transactionAmount = 5.99,
-        isChecked = false
+        transactionAmount = 5.99
     ),
     TransactionItem(
         id = 4,
         transactionTitle = "Coffee",
-        transactionAmount = 6.50,
-        isChecked = false
+        transactionAmount = 6.50
     ),
     TransactionItem(
         id = 5,
         transactionTitle = "Bacon Blue Cheese Burger (new receipt)",
-        transactionAmount = 7.99,
-        isChecked = false
+        transactionAmount = 7.99
     ),
     TransactionItem(
         id = 6,
         transactionTitle = "Fish",
-        transactionAmount = 16.99,
-        isChecked = true
+        transactionAmount = 16.99
     ),
     TransactionItem(
         id = 7,
         transactionTitle = "Fries",
-        transactionAmount = 8.50,
-        isChecked = false
+        transactionAmount = 8.50
     ),
 )
 

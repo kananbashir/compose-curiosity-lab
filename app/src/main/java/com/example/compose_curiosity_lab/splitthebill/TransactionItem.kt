@@ -1,6 +1,7 @@
 package com.example.compose_curiosity_lab.splitthebill
 
-import androidx.annotation.DrawableRes
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 
 /**
  * Created on 8/9/2024
@@ -11,5 +12,5 @@ data class TransactionItem(
     val id: Int,
     val transactionTitle: String,
     val transactionAmount: Double,
-    val isChecked: Boolean
+    var isChecked: MutableState<Boolean> = mutableStateOf(false)
 )
