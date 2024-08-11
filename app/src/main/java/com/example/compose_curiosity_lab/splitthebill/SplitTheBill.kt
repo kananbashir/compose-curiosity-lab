@@ -42,6 +42,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
@@ -159,7 +161,11 @@ private fun TransactionItem(
         ) {
             LimitedLengthText(
                 text = transactionItem.transactionTitle,
-                maxChars = 26
+                maxChars = 26,
+                fontSize = 18.sp,
+                color = transactionItemChipTitleColor,
+                fontWeight = FontWeight.Bold,
+                overflow = TextOverflow.Ellipsis
             )
 
             Text(
@@ -199,41 +205,51 @@ fun SplitAmountBubble(
 ) {
     Box(
         modifier = modifier
-            .wrapContentSize()
-            .padding(start = 40.dp, top = 16.dp)
-            .clip(CircleShape)
-            .background(bubbleColor)
+            .fillMaxWidth()
+            .padding(end = 3.dp),
+        contentAlignment = Alignment.CenterEnd
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .padding(5.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                .wrapContentSize()
+                .padding(top = 13.dp)
+                .clip(CircleShape)
+                .background(bubbleColor),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(18.dp)
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(Color.White),
-                contentAlignment = Alignment.Center
+                    .padding(vertical = 3.dp, horizontal = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Color.White),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        modifier = Modifier
+                            .offset { IntOffset(0, -7) },
+                        text = item.requestAmountCount.toString(),
+                        color = bubbleColor,
+                        textAlign = TextAlign.Center,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
                 Text(
                     modifier = Modifier
-                        .offset((-0.4).dp, (-1).dp)
-                        .fillMaxWidth(),
-                    text = item.requestAmountCount.toString(),
-                    color = bubbleColor,
-                    textAlign = TextAlign.Center
+                        .offset(y = 1.dp),
+                    text = "$${item.requestAmount.toString()}",
+                    color = Color.White,
+                    textAlign = TextAlign.Start,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Light
                 )
             }
-
-            Text(
-                modifier = Modifier,
-                text = "$${item.requestAmount.toString()}",
-                color = Color.White,
-                textAlign = TextAlign.Start,
-                overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.Light
-            )
         }
     }
 }
@@ -242,7 +258,12 @@ fun SplitAmountBubble(
 private fun LimitedLengthText(
     text: String,
     maxChars: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    maxLines: Int = 1,
+    fontWeight: FontWeight = FontWeight.Normal,
+    fontSize: TextUnit = 12.sp,
+    color: Color = Color.Black,
+    overflow: TextOverflow = TextOverflow.Visible
 ) {
     val limitedText = if (text.length > maxChars) {
         text.take(maxChars)+"..."
@@ -253,11 +274,11 @@ private fun LimitedLengthText(
     Text(
         modifier = modifier,
         text = limitedText,
-        maxLines = 1,
-        fontWeight = FontWeight.Bold,
-        fontSize = 18.sp,
-        color = transactionItemChipTitleColor,
-        overflow = TextOverflow.Ellipsis
+        maxLines = maxLines,
+        fontWeight = fontWeight,
+        fontSize = fontSize,
+        color = color,
+        overflow = overflow
     )
 }
 
