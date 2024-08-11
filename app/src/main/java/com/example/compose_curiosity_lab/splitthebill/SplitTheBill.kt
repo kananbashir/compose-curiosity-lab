@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,12 +38,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -63,7 +68,13 @@ import com.example.compose_curiosity_lab.R
  */
 
 class ScreenState {
-    var isTransactionItemPicked by mutableStateOf(false)
+    private var isTransactionItemPicked by mutableStateOf(false)
+    private var isDragStarted by mutableStateOf(false)
+
+    fun startDrag() {
+        isTransactionItemPicked = true
+        isDragStarted = true
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -72,6 +83,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
 
     val personItemList = remember { personList.toMutableStateList() }
     val transactionItemList = remember { transactionList.toMutableStateList() }
+    val screenState = remember { ScreenState() }
 
     Column(
         modifier = modifier.fillMaxSize()
@@ -110,10 +122,23 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             transactionItemList.forEach {
-                TransactionItem(it)
+                TransactionItem(
+                    transactionItem = it,
+                    onDragStart = {},
+                    onDrag = { dragAmount ->
+                        screenState.startDrag()
+                    }
+                )
             }
         }
+
+
     }
+}
+
+@Composable
+private fun TransactionItemOverlay() {
+    
 }
 
 @Composable
@@ -161,6 +186,8 @@ private fun PersonItem(
 @Composable
 private fun TransactionItem(
     transactionItem: TransactionItem,
+    onDragStart: (offset: Offset) -> Unit,
+    onDrag: (dragAmount: Offset) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val checkIconAlpha by animateFloatAsState(
@@ -169,8 +196,23 @@ private fun TransactionItem(
 
     Box(
         modifier = modifier
+            .onGloballyPositioned { coordinate ->
+                transactionItem.itemPositionInFlow = coordinate.positionInRoot()
+            }
             .clip(RoundedCornerShape(35f))
             .background(transactionItemChipColor)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        onDragStart(offset)
+                    },
+
+                    onDrag = { _, dragAmount ->
+                        onDrag(dragAmount)
+
+                    }
+                )
+            }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
