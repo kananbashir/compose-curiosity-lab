@@ -1,5 +1,8 @@
 package com.example.compose_curiosity_lab.splitthebill
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector2D
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Offset
@@ -14,5 +17,6 @@ data class TransactionItem(
     val transactionTitle: String,
     val transactionAmount: Double,
     var isChecked: MutableState<Boolean> = mutableStateOf(false),
-    var itemPositionInFlow: Offset? = null
+    var itemPositionInFlow: Offset? = null,
+    var dragOffset: Animatable<Offset, AnimationVector2D> = Animatable(Offset.Zero, Offset.VectorConverter)
 )
