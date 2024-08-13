@@ -1,7 +1,9 @@
 package com.example.compose_curiosity_lab.splitthebill
 
 import android.graphics.BlurMaskFilter
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
@@ -57,7 +60,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
@@ -132,7 +134,11 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                             detectDragGestures(
                                 onDragStart = { _ ->
                                     scope.launch {
+                                        launch { item.parentScale.animateTo(1.2f) }
+                                        launch { item.shadowAlpha.animateTo(1f) }
+                                        if (!item.isChecked.value) item.isChecked.value = true
                                         item.dragOffset.snapTo(item.itemPositionInFlow ?: Offset.Zero)
+                                        item.isPicked.value = true
                                         screenState.pickedTransactionItem = item
                                     }
                                 },
@@ -140,6 +146,21 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                                 onDrag = { _, dragAmount ->
                                     scope.launch {
                                         item.dragOffset.snapTo(item.dragOffset.value + dragAmount)
+                                    }
+                                },
+
+                                onDragEnd = {
+                                    scope.launch {
+                                        launch { item.parentScale.animateTo(1f,
+                                            spring(stiffness = 70f, dampingRatio = Spring.DampingRatioNoBouncy)) }
+                                        launch { item.shadowAlpha.animateTo(0f,
+                                            spring(stiffness = 70f, dampingRatio = Spring.DampingRatioNoBouncy)) }
+                                        item.dragOffset.animateTo(
+                                            targetValue = item.itemPositionInFlow ?: Offset.Zero,
+                                            animationSpec = spring(stiffness = 70f, dampingRatio = Spring.DampingRatioNoBouncy)
+                                        )
+                                        item.isPicked.value = false
+                                        screenState.pickedTransactionItem = null
                                     }
                                 }
                             )
@@ -222,8 +243,18 @@ private fun TransactionItem(
 
     Box(
         modifier = modifier
+            .scale(transactionItem.parentScale.value)
+            .shadow(
+                color = transactionItemChipColorDark,
+                borderRadius = 30.dp,
+                blurRadius = 16.dp,
+                offsetY = 50.dp,
+                alpha = transactionItem.shadowAlpha.value,
+                spread = 0.dp
+            )
             .onGloballyPositioned { coordinate ->
-                transactionItem.itemPositionInFlow = coordinate.positionInRoot()
+                if (!transactionItem.isPicked.value)
+                    transactionItem.itemPositionInFlow = coordinate.positionInRoot()
             }
             .clip(RoundedCornerShape(35f))
             .background(transactionItemChipColor),
@@ -235,13 +266,14 @@ private fun TransactionItem(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            LimitedLengthText(
-                text = transactionItem.transactionTitle,
-                maxChars = 26,
+            Text(
+                modifier = Modifier.weight(1f, false),
+                text = "$${transactionItem.transactionTitle}",
                 fontSize = 18.sp,
                 color = transactionItemChipTitleColor,
                 fontWeight = FontWeight.Bold,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1
             )
 
             Text(
@@ -330,34 +362,6 @@ fun SplitAmountBubble(
     }
 }
 
-@Composable
-private fun LimitedLengthText(
-    text: String,
-    maxChars: Int,
-    modifier: Modifier = Modifier,
-    maxLines: Int = 1,
-    fontWeight: FontWeight = FontWeight.Normal,
-    fontSize: TextUnit = 12.sp,
-    color: Color = Color.Black,
-    overflow: TextOverflow = TextOverflow.Visible
-) {
-    val limitedText = if (text.length > maxChars) {
-        text.take(maxChars)+"..."
-    } else {
-        text
-    }
-
-    Text(
-        modifier = modifier,
-        text = limitedText,
-        maxLines = maxLines,
-        fontWeight = fontWeight,
-        fontSize = fontSize,
-        color = color,
-        overflow = overflow
-    )
-}
-
 private fun Modifier.shadow(
     color: Color = Color.Black,
     borderRadius: Dp = 0.dp,
@@ -365,6 +369,7 @@ private fun Modifier.shadow(
     offsetX: Dp = 0.dp,
     offsetY: Dp = 0.dp,
     spread: Dp = 0f.dp,
+    alpha: Float = 1f,
     modifier: Modifier = Modifier
 ) = this.then(
     modifier.drawBehind {
@@ -382,7 +387,8 @@ private fun Modifier.shadow(
                     (BlurMaskFilter(blurRadius.toPx(), BlurMaskFilter.Blur.NORMAL))
             }
 
-            frameworkPaint.color = color.toArgb()
+            val shadowColor = color.copy(alpha = color.alpha * alpha)
+            frameworkPaint.color = shadowColor.toArgb()
 
             it.drawRoundRect(
                 left = leftPixel,
@@ -399,6 +405,7 @@ private fun Modifier.shadow(
 
 private val bubbleColor: Color = Color("#195FEB".toColorInt())
 private val transactionItemChipColor: Color = Color("#D0E3FC".toColorInt())
+private val transactionItemChipColorDark: Color = Color("#2f5a99".toColorInt())
 private val transactionItemChipTitleColor: Color = Color("#18365B".toColorInt())
 
 
