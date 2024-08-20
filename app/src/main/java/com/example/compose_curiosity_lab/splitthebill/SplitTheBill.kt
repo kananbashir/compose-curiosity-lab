@@ -1,9 +1,10 @@
 package com.example.compose_curiosity_lab.splitthebill
 
 import android.graphics.BlurMaskFilter
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,7 +53,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -74,7 +76,9 @@ import kotlin.math.roundToInt
 
 class ScreenState {
     //If it is not null, that means the drag is started.
-    var pickedTransactionItem by mutableStateOf<TransactionItem?>(null)
+    var pickedItemGlobalOffset by mutableStateOf<Offset?>(null)
+    var globalDragOffset by mutableStateOf(Animatable(Offset.Zero, Offset.VectorConverter))
+    var isDragStarted by mutableStateOf(false)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -84,6 +88,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val personItemList = remember { personList.toMutableStateList() }
     val transactionItemList = remember { transactionList.toMutableStateList() }
+    val stackedTransactionItemList = remember { listOf<TransactionItem>().toMutableStateList() }
     val screenState = remember { ScreenState() }
 
     Column(
@@ -111,7 +116,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
         }
 
         HorizontalDivider(
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp ,top = 20.dp),
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp),
             thickness = 0.3.dp
         )
 
@@ -122,46 +127,39 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            transactionItemList.forEach { item ->
+            transactionItemList.forEachIndexed { index, flowItem ->
                 Box(
                     modifier = Modifier
                         .graphicsLayer {
-                            screenState.pickedTransactionItem?.let {
-                                if (it == item) alpha = 0f
+                            alpha = flowItem.itemAlpha.value
+                        }
+                        .onGloballyPositioned {
+                            if (flowItem.itemPositionInFlow == null) {
+                                flowItem.itemPositionInFlow = it.positionOnScreen()
                             }
                         }
                         .pointerInput(Unit) {
                             detectDragGestures(
                                 onDragStart = { _ ->
                                     scope.launch {
-                                        launch { item.parentScale.animateTo(1.2f) }
-                                        launch { item.shadowAlpha.animateTo(1f) }
-                                        if (!item.isChecked.value) item.isChecked.value = true
-                                        item.dragOffset.snapTo(item.itemPositionInFlow ?: Offset.Zero)
-                                        item.isPicked.value = true
-                                        screenState.pickedTransactionItem = item
+                                        if (flowItem.isChecked.value.not()) {
+                                            flowItem.isChecked.value = true
+                                            stackedTransactionItemList.add(flowItem)
+                                        }
+                                        stackedTransactionItemList.moveItem(item = flowItem, toIndex = 0)
+                                        screenState.pickedItemGlobalOffset = stackedTransactionItemList[0].itemPositionInFlow
+                                        screenState.globalDragOffset.snapTo(screenState.pickedItemGlobalOffset!!) //TODO: TO CATCH NULL POINTER EX.
+                                        screenState.isDragStarted = true
                                     }
                                 },
 
                                 onDrag = { _, dragAmount ->
                                     scope.launch {
-                                        item.dragOffset.snapTo(item.dragOffset.value + dragAmount)
+                                        screenState.globalDragOffset.snapTo(screenState.globalDragOffset.value + dragAmount)
                                     }
                                 },
 
                                 onDragEnd = {
-                                    scope.launch {
-                                        launch { item.parentScale.animateTo(1f,
-                                            spring(stiffness = 70f, dampingRatio = Spring.DampingRatioNoBouncy)) }
-                                        launch { item.shadowAlpha.animateTo(0f,
-                                            spring(stiffness = 70f, dampingRatio = Spring.DampingRatioNoBouncy)) }
-                                        item.dragOffset.animateTo(
-                                            targetValue = item.itemPositionInFlow ?: Offset.Zero,
-                                            animationSpec = spring(stiffness = 70f, dampingRatio = Spring.DampingRatioNoBouncy)
-                                        )
-                                        item.isPicked.value = false
-                                        screenState.pickedTransactionItem = null
-                                    }
                                 }
                             )
                         }
@@ -169,23 +167,55 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
                         ) {
-                            item.isChecked.value = !item.isChecked.value
+                            if (flowItem.isChecked.value.not()) {
+                                flowItem.isChecked.value = true
+                                stackedTransactionItemList.add(flowItem)
+                            } else {
+                                flowItem.isChecked.value = false
+                                stackedTransactionItemList.remove(flowItem)
+                            }
                         },
                 ) {
-                    TransactionItem(item)
+                    TransactionItem(flowItem)
                 }
             }
         }
     }
 
-    screenState.pickedTransactionItem?.let {
+    if (screenState.isDragStarted) {
         Box(
             modifier = Modifier
-                .offset {
-                    IntOffset(it.dragOffset.value.x.roundToInt(), it.dragOffset.value.y.roundToInt())
+                .drawBehind {
+                    drawRect(color = Color.Black.copy(alpha = 0.5f))
                 }
         ) {
-            TransactionItem(it)
+            stackedTransactionItemList.reversed().forEach { stackedItem ->
+                transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 0f
+                val tempDragOffset by remember { mutableStateOf(Animatable(Offset.Zero, Offset.VectorConverter)) }
+
+                scope.launch {
+                    tempDragOffset.snapTo(stackedItem.itemPositionInFlow!!) //TODO: TO CATCH NULL POINTER EX.
+                }
+
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                tempDragOffset.value.x.roundToInt(),
+                                tempDragOffset.value.y.roundToInt()
+                            )
+                        }
+                ) {
+                    TransactionItem(transactionItem = stackedItem, modifier = Modifier.background(Color.Yellow))
+                }
+
+                scope.launch {
+                    tempDragOffset.animateTo(
+                        screenState.pickedItemGlobalOffset!!, //TODO: TO CATCH NULL POINTER EX.
+                        tween(2000)
+                    )
+                }
+            }
         }
     }
 }
@@ -252,10 +282,6 @@ private fun TransactionItem(
                 alpha = transactionItem.shadowAlpha.value,
                 spread = 0.dp
             )
-            .onGloballyPositioned { coordinate ->
-                if (!transactionItem.isPicked.value)
-                    transactionItem.itemPositionInFlow = coordinate.positionInRoot()
-            }
             .clip(RoundedCornerShape(35f))
             .background(transactionItemChipColor),
         contentAlignment = Alignment.Center
@@ -403,6 +429,13 @@ private fun Modifier.shadow(
     }
 )
 
+private fun <T> SnapshotStateList<T>.moveItem(item: T, toIndex: Int) {
+    if (isNotEmpty() && indexOf(item) != 0) {
+        remove(item)
+        add(toIndex, item)
+    }
+}
+
 private val bubbleColor: Color = Color("#195FEB".toColorInt())
 private val transactionItemChipColor: Color = Color("#D0E3FC".toColorInt())
 private val transactionItemChipColorDark: Color = Color("#2f5a99".toColorInt())
@@ -509,7 +542,7 @@ val transactionList: List<TransactionItem> = listOf(
     ),
 )
 
-@Preview (showBackground = true)
+@Preview(showBackground = true)
 @Composable
 private fun SplitTheBillPreview() {
     SplitTheBill()
