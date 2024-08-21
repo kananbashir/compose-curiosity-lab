@@ -2,6 +2,9 @@ package com.example.compose_curiosity_lab.splitthebill
 
 import android.graphics.BlurMaskFilter
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationEndReason
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.AnimationVector
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -44,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -68,13 +72,15 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
 import com.example.compose_curiosity_lab.R
 import kotlinx.coroutines.launch
-import java.time.LocalDateTime
 import kotlin.math.roundToInt
 
 /**
  * Created on 8/9/2024
  * @author Kanan Bashir
  */
+
+const val PICKING_UP_ANIM_TRANSITION_DURATION = 300
+const val SCALE_ANIM_DURATION = 100
 
 class ScreenState {
     //If it is not null, that means the drag is started.
@@ -101,7 +107,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 20.dp),
-            text = "Fair Share ${LocalDateTime.now().toLocalTime()}",
+            text = "Fair Share new47",
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp,
@@ -150,8 +156,8 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                                             flowItem.isChecked.value = true
                                             stackedTransactionItemList.add(flowItem)
                                         }
-                                        stackedTransactionItemList.moveItem(item = flowItem, toIndex = 0)
-                                        screenState.pickedItemGlobalOffset = stackedTransactionItemList[0].itemPositionInFlow
+                                        stackedTransactionItemList.moveItem(flowItem, 0)
+                                        screenState.pickedItemGlobalOffset = flowItem.itemPositionInFlow
                                         screenState.globalDragOffset.snapTo(Offset.Zero)
                                         screenState.isDragStarted = true
                                     }
@@ -165,7 +171,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
 
                                 onDragEnd = {
                                     scope.launch {
-                                        screenState.globalDragOffset.animateTo(Offset.Zero, tween(2000))
+                                        screenState.globalDragOffset.animateTo(Offset.Zero, tween(PICKING_UP_ANIM_TRANSITION_DURATION))
                                     }
                                     screenState.isDraggingCancelled = true
                                 }
@@ -203,14 +209,22 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             stackedTransactionItemList.reversed().forEachIndexed { index, stackedItem ->
                 transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 0f
                 val tempDragOffset by remember { mutableStateOf(Animatable(stackedItem.itemPositionInFlow!!, Offset.VectorConverter)) }
+                val rotationValue = remember {
+                    when {
+                        index == stackedTransactionItemList.size-1 -> 0f
+                        index % 2 == 0 -> 7f
+                        else -> -7f
+                    }
+                }
 
                 scope.launch {
                     tempDragOffset.animateTo(
                         screenState.pickedItemGlobalOffset ?: Offset.Zero,
-                        tween(2000)
+                        tween(PICKING_UP_ANIM_TRANSITION_DURATION)
                     )
                 }
-                scope.launch { stackedItem.parentScale.animateTo(1.2f, tween(1000)) }
+                scope.launch { stackedItem.overlayItemRotation.animateTo(rotationValue, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
+                scope.launch { stackedItem.parentScale.animateTo(1.2f, tween(SCALE_ANIM_DURATION)) }
                 scope.launch { stackedItem.shadowAlpha.animateTo(1f) }
 
                 Box(
@@ -227,11 +241,19 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
 
                 LaunchedEffect(key1 = screenState.isDraggingCancelled) {
                     if (screenState.isDraggingCancelled) {
-                        scope.launch { tempDragOffset.animateTo(stackedItem.itemPositionInFlow ?: Offset.Zero, tween(2000))  }
-                        scope.launch { stackedItem.parentScale.animateTo(1f, tween(2000)) }
-                        scope.launch { stackedItem.shadowAlpha.animateTo(0f, tween(2000)) }
-                        transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 1f
-                        screenState.isDragStarted = false
+                        scope.launch {
+                            tempDragOffset.animateWithResult(
+                                stackedItem.itemPositionInFlow ?: Offset.Zero,
+                                tween(PICKING_UP_ANIM_TRANSITION_DURATION),
+                                onAnimationEnd = {
+                                    transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 1f
+                                    screenState.isDragStarted = false
+                                }
+                            )
+                        }
+                        scope.launch { stackedItem.parentScale.animateTo(1f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
+                        scope.launch { stackedItem.shadowAlpha.animateTo(0f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
+                        scope.launch { stackedItem.overlayItemRotation.animateTo(0f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
                     }
                 }
             }
@@ -292,6 +314,7 @@ private fun TransactionItem(
 
     Box(
         modifier = modifier
+            .rotate(transactionItem.overlayItemRotation.value)
             .scale(transactionItem.parentScale.value)
             .shadow(
                 color = transactionItemChipColorDark,
@@ -452,6 +475,17 @@ private fun <T> SnapshotStateList<T>.moveItem(item: T, toIndex: Int) {
     if (isNotEmpty() && indexOf(item) != 0) {
         remove(item)
         add(toIndex, item)
+    }
+}
+
+private suspend fun <T, V: AnimationVector> Animatable<T, V>.animateWithResult(
+    targetOffset: T,
+    animationSpec: AnimationSpec<T>,
+    onAnimationEnd: () -> Unit
+) {
+    when (animateTo(targetOffset, animationSpec).endReason) {
+        AnimationEndReason.Finished -> { onAnimationEnd() }
+        else -> {}
     }
 }
 

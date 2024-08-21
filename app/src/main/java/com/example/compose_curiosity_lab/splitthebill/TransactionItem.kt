@@ -25,4 +25,5 @@ data class TransactionItem(
     var dragOffset: Animatable<Offset, AnimationVector2D> = Animatable(Offset.Zero, Offset.VectorConverter),
     var parentScale: Animatable<Float, AnimationVector1D> = Animatable(1f),
     var shadowAlpha: Animatable<Float, AnimationVector1D> = Animatable(0f),
+    var overlayItemRotation: Animatable<Float, AnimationVector1D> = Animatable(0f)
 )
