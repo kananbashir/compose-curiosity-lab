@@ -32,6 +32,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
 import com.example.compose_curiosity_lab.R
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 import kotlin.math.roundToInt
 
 /**
@@ -79,6 +81,7 @@ class ScreenState {
     var pickedItemGlobalOffset by mutableStateOf<Offset?>(null)
     var globalDragOffset by mutableStateOf(Animatable(Offset.Zero, Offset.VectorConverter))
     var isDragStarted by mutableStateOf(false)
+    var isDraggingCancelled by mutableStateOf(false)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -98,7 +101,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 20.dp),
-            text = "Fair Share",
+            text = "Fair Share ${LocalDateTime.now().toLocalTime()}",
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp,
@@ -142,13 +145,14 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                             detectDragGestures(
                                 onDragStart = { _ ->
                                     scope.launch {
+                                        screenState.isDraggingCancelled = false
                                         if (flowItem.isChecked.value.not()) {
                                             flowItem.isChecked.value = true
                                             stackedTransactionItemList.add(flowItem)
                                         }
                                         stackedTransactionItemList.moveItem(item = flowItem, toIndex = 0)
                                         screenState.pickedItemGlobalOffset = stackedTransactionItemList[0].itemPositionInFlow
-                                        screenState.globalDragOffset.snapTo(screenState.pickedItemGlobalOffset!!) //TODO: TO CATCH NULL POINTER EX.
+                                        screenState.globalDragOffset.snapTo(Offset.Zero)
                                         screenState.isDragStarted = true
                                     }
                                 },
@@ -160,6 +164,10 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                                 },
 
                                 onDragEnd = {
+                                    scope.launch {
+                                        screenState.globalDragOffset.animateTo(Offset.Zero, tween(2000))
+                                    }
+                                    screenState.isDraggingCancelled = true
                                 }
                             )
                         }
@@ -185,17 +193,25 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
     if (screenState.isDragStarted) {
         Box(
             modifier = Modifier
-                .drawBehind {
-                    drawRect(color = Color.Black.copy(alpha = 0.5f))
+                .offset {
+                    IntOffset(
+                        screenState.globalDragOffset.value.x.roundToInt(),
+                        screenState.globalDragOffset.value.y.roundToInt(),
+                    )
                 }
         ) {
-            stackedTransactionItemList.reversed().forEach { stackedItem ->
+            stackedTransactionItemList.reversed().forEachIndexed { index, stackedItem ->
                 transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 0f
-                val tempDragOffset by remember { mutableStateOf(Animatable(Offset.Zero, Offset.VectorConverter)) }
+                val tempDragOffset by remember { mutableStateOf(Animatable(stackedItem.itemPositionInFlow!!, Offset.VectorConverter)) }
 
                 scope.launch {
-                    tempDragOffset.snapTo(stackedItem.itemPositionInFlow!!) //TODO: TO CATCH NULL POINTER EX.
+                    tempDragOffset.animateTo(
+                        screenState.pickedItemGlobalOffset ?: Offset.Zero,
+                        tween(2000)
+                    )
                 }
+                scope.launch { stackedItem.parentScale.animateTo(1.2f, tween(1000)) }
+                scope.launch { stackedItem.shadowAlpha.animateTo(1f) }
 
                 Box(
                     modifier = Modifier
@@ -206,14 +222,17 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                             )
                         }
                 ) {
-                    TransactionItem(transactionItem = stackedItem, modifier = Modifier.background(Color.Yellow))
+                    TransactionItem(transactionItem = stackedItem)
                 }
 
-                scope.launch {
-                    tempDragOffset.animateTo(
-                        screenState.pickedItemGlobalOffset!!, //TODO: TO CATCH NULL POINTER EX.
-                        tween(2000)
-                    )
+                LaunchedEffect(key1 = screenState.isDraggingCancelled) {
+                    if (screenState.isDraggingCancelled) {
+                        scope.launch { tempDragOffset.animateTo(stackedItem.itemPositionInFlow ?: Offset.Zero, tween(2000))  }
+                        scope.launch { stackedItem.parentScale.animateTo(1f, tween(2000)) }
+                        scope.launch { stackedItem.shadowAlpha.animateTo(0f, tween(2000)) }
+                        transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 1f
+                        screenState.isDragStarted = false
+                    }
                 }
             }
         }
