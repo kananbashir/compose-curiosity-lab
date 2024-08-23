@@ -27,8 +27,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -52,13 +54,17 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionOnScreen
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -67,8 +73,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toIntRect
 import androidx.core.graphics.toColorInt
 import com.example.compose_curiosity_lab.R
 import kotlinx.coroutines.launch
@@ -80,7 +89,8 @@ import kotlin.math.roundToInt
  */
 
 const val PICKING_UP_ANIM_TRANSITION_DURATION = 300
-const val SCALE_ANIM_DURATION = 100
+const val TRANSACTION_ITEM_SCALE_ANIM_DURATION = 100
+const val PERSON_ITEM_SCALE_ANIM_DURATION = 800
 
 class ScreenState {
     //If it is not null, that means the drag is started.
@@ -88,6 +98,33 @@ class ScreenState {
     var globalDragOffset by mutableStateOf(Animatable(Offset.Zero, Offset.VectorConverter))
     var isDragStarted by mutableStateOf(false)
     var isDraggingCancelled by mutableStateOf(false)
+    var isInDropBounds by mutableStateOf(false)
+    var boxSize: IntSize? = null
+    var selectedPersonItemKey by mutableStateOf<Int?>(null)
+    var lazyGridLayoutCoordinates by mutableStateOf<LayoutCoordinates?>(null)
+    var flowRowLayoutCoordinates by mutableStateOf<LayoutCoordinates?>(null)
+
+    fun findItemAtOffset(lazyGridState: LazyGridState, hitOffset: Offset) {
+        lazyGridLayoutCoordinates?.let {
+            flowRowLayoutCoordinates?.let {
+                //We are using the grid's coordinates to convert hit offset relative to source (flow row, in this case) to an offset
+                // relative to the grid.
+                val localHitOffset = lazyGridLayoutCoordinates!!.localPositionOf(flowRowLayoutCoordinates!!, hitOffset)
+                val lazyGridItemInfo = lazyGridState.layoutInfo.visibleItemsInfo.find { itemInfo ->
+                    itemInfo.size.toIntRect().contains(localHitOffset.round() - itemInfo.offset)
+                }
+
+                try {
+                    lazyGridItemInfo?.key?.let { itemInfo ->
+                        val foundKey = itemInfo as Int
+                        selectedPersonItemKey = foundKey
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -95,10 +132,15 @@ class ScreenState {
 fun SplitTheBill(modifier: Modifier = Modifier) {
 
     val scope = rememberCoroutineScope()
+    val config = LocalConfiguration.current
+    val density = LocalDensity.current
+    val screenHeight = remember { with(density) { config.screenHeightDp.toDp().toPx() } }
+    var flowRowHeight: Float? = remember { null }
     val personItemList = remember { personList.toMutableStateList() }
     val transactionItemList = remember { transactionList.toMutableStateList() }
     val stackedTransactionItemList = remember { listOf<TransactionItem>().toMutableStateList() }
     val screenState = remember { ScreenState() }
+    val lazyGridState = rememberLazyGridState()
 
     Column(
         modifier = modifier.fillMaxSize()
@@ -107,7 +149,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 20.dp),
-            text = "Fair Share new47",
+            text = "Fair Share new124",
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp,
@@ -116,11 +158,17 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
 
         LazyVerticalGrid(
             modifier = Modifier
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    if (screenState.lazyGridLayoutCoordinates == null) {
+                        screenState.lazyGridLayoutCoordinates = coordinates
+                    }
+                },
+            state = lazyGridState,
             columns = GridCells.Fixed(3)
         ) {
-            items(personItemList, key = { it.name }) { person ->
-                PersonItem(person)
+            items(personItemList, key = { it.id }) { person ->
+                PersonItem(person, screenState)
             }
         }
 
@@ -132,11 +180,16 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
         FlowRow(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(25.dp),
+                .padding(25.dp)
+                .onGloballyPositioned { coordinates ->
+                    if (screenState.flowRowLayoutCoordinates == null) {
+                        screenState.flowRowLayoutCoordinates = coordinates
+                    }
+                },
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            transactionItemList.forEachIndexed { index, flowItem ->
+            transactionItemList.forEachIndexed { _, flowItem ->
                 Box(
                     modifier = Modifier
                         .graphicsLayer {
@@ -145,6 +198,10 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                         .onGloballyPositioned {
                             if (flowItem.itemPositionInFlow == null) {
                                 flowItem.itemPositionInFlow = it.positionOnScreen()
+                            }
+
+                            if (flowRowHeight == null) {
+                                flowRowHeight = it.size.height - screenHeight
                             }
                         }
                         .pointerInput(Unit) {
@@ -163,9 +220,15 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                                     }
                                 },
 
-                                onDrag = { _, dragAmount ->
+                                onDrag = { change, dragAmount ->
                                     scope.launch {
                                         screenState.globalDragOffset.snapTo(screenState.globalDragOffset.value + dragAmount)
+                                        flowRowHeight?.let {
+                                            if (screenState.globalDragOffset.value.y < it) {
+                                                screenState.isInDropBounds = true
+                                                screenState.findItemAtOffset(lazyGridState, change.position)
+                                            }
+                                        }
                                     }
                                 },
 
@@ -208,7 +271,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
         ) {
             stackedTransactionItemList.reversed().forEachIndexed { index, stackedItem ->
                 transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 0f
-                val tempDragOffset by remember { mutableStateOf(Animatable(stackedItem.itemPositionInFlow!!, Offset.VectorConverter)) }
+                val tempDragOffset by remember { mutableStateOf(Animatable(stackedItem.itemPositionInFlow ?: Offset.Zero, Offset.VectorConverter)) }
                 val rotationValue = remember {
                     when {
                         index == stackedTransactionItemList.size-1 -> 0f
@@ -217,6 +280,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                     }
                 }
 
+                stackedItem.itemBorderSize.value = 1.dp
                 scope.launch {
                     tempDragOffset.animateTo(
                         screenState.pickedItemGlobalOffset ?: Offset.Zero,
@@ -224,7 +288,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                     )
                 }
                 scope.launch { stackedItem.overlayItemRotation.animateTo(rotationValue, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
-                scope.launch { stackedItem.parentScale.animateTo(1.2f, tween(SCALE_ANIM_DURATION)) }
+                scope.launch { stackedItem.parentScale.animateTo(1.2f, tween(TRANSACTION_ITEM_SCALE_ANIM_DURATION)) }
                 scope.launch { stackedItem.shadowAlpha.animateTo(1f) }
 
                 Box(
@@ -253,6 +317,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                         }
                         scope.launch { stackedItem.parentScale.animateTo(1f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
                         scope.launch { stackedItem.shadowAlpha.animateTo(0f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
+                        stackedItem.itemBorderSize.value = 0.dp
                         scope.launch { stackedItem.overlayItemRotation.animateTo(0f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
                     }
                 }
@@ -264,10 +329,23 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
 @Composable
 private fun PersonItem(
     item: PersonItem,
+    screenState: ScreenState,
     modifier: Modifier = Modifier
 ) {
+    val itemScale by animateFloatAsState(
+        targetValue = if (screenState.selectedPersonItemKey == item.id) 1.1f else 1f,
+        animationSpec = tween(PERSON_ITEM_SCALE_ANIM_DURATION),
+        label = ""
+    )
+
     Box(
-        modifier = modifier,
+        modifier = modifier
+            .scale(itemScale)
+            .onGloballyPositioned {
+                if (screenState.boxSize == null) {
+                    screenState.boxSize = it.size
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -314,6 +392,7 @@ private fun TransactionItem(
 
     Box(
         modifier = modifier
+            .graphicsLayer { transformOrigin = TransformOrigin.Center }
             .rotate(transactionItem.overlayItemRotation.value)
             .scale(transactionItem.parentScale.value)
             .shadow(
@@ -325,7 +404,8 @@ private fun TransactionItem(
                 spread = 0.dp
             )
             .clip(RoundedCornerShape(35f))
-            .background(transactionItemChipColor),
+            .background(transactionItemChipColor)
+            .border(transactionItem.itemBorderSize.value, transactionItemChipColorDark.copy(0.3f), RoundedCornerShape(35f)),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -336,7 +416,7 @@ private fun TransactionItem(
         ) {
             Text(
                 modifier = Modifier.weight(1f, false),
-                text = "$${transactionItem.transactionTitle}",
+                text = transactionItem.transactionTitle,
                 fontSize = 18.sp,
                 color = transactionItemChipTitleColor,
                 fontWeight = FontWeight.Bold,
@@ -430,6 +510,8 @@ fun SplitAmountBubble(
     }
 }
 
+
+//EXTENSION FUNCTIONS
 private fun Modifier.shadow(
     color: Color = Color.Black,
     borderRadius: Dp = 0.dp,
@@ -493,6 +575,11 @@ private val bubbleColor: Color = Color("#195FEB".toColorInt())
 private val transactionItemChipColor: Color = Color("#D0E3FC".toColorInt())
 private val transactionItemChipColorDark: Color = Color("#2f5a99".toColorInt())
 private val transactionItemChipTitleColor: Color = Color("#18365B".toColorInt())
+
+
+
+
+
 
 
 //-------------------------------- Preview related things --------------------------------
