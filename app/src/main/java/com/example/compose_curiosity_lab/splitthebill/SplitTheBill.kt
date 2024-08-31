@@ -1,5 +1,6 @@
 package com.example.compose_curiosity_lab.splitthebill
 
+import android.content.res.Configuration
 import android.graphics.BlurMaskFilter
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationEndReason
@@ -62,6 +63,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -71,6 +73,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -80,6 +83,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toIntRect
 import androidx.core.graphics.toColorInt
 import com.example.compose_curiosity_lab.R
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -92,38 +96,74 @@ const val PICKING_UP_ANIM_TRANSITION_DURATION = 300
 const val TRANSACTION_ITEM_SCALE_ANIM_DURATION = 100
 const val PERSON_ITEM_SCALE_ANIM_DURATION = 800
 
-class ScreenState {
+class ScreenState(scope: CoroutineScope, configuration: Configuration, density: Density) {
     //If it is not null, that means the drag is started.
     var pickedItemGlobalOffset by mutableStateOf<Offset?>(null)
     var globalDragOffset by mutableStateOf(Animatable(Offset.Zero, Offset.VectorConverter))
     var isDragStarted by mutableStateOf(false)
     var isDraggingCancelled by mutableStateOf(false)
     var isInDropBounds by mutableStateOf(false)
+    var isItemDropped by mutableStateOf(false)
     var boxSize: IntSize? = null
     var selectedPersonItemKey by mutableStateOf<Int?>(null)
-    var lazyGridLayoutCoordinates by mutableStateOf<LayoutCoordinates?>(null)
-    var flowRowLayoutCoordinates by mutableStateOf<LayoutCoordinates?>(null)
+    var flowRowHeight: Float? = null
+    var screenHeight: Float = with(density) { configuration.screenHeightDp.toDp().toPx() }
+    var lazyGridLayoutCoordinates: LayoutCoordinates? = null
+    var flowRowLayoutCoordinates: LayoutCoordinates? = null
+    var rootLayoutCoordinates: LayoutCoordinates? = null
+    var coroutineScope: CoroutineScope = scope
 
     fun findItemAtOffset(lazyGridState: LazyGridState, hitOffset: Offset) {
         lazyGridLayoutCoordinates?.let {
-            flowRowLayoutCoordinates?.let {
-                //We are using the grid's coordinates to convert hit offset relative to source (flow row, in this case) to an offset
-                // relative to the grid.
-                val localHitOffset = lazyGridLayoutCoordinates!!.localPositionOf(flowRowLayoutCoordinates!!, hitOffset)
-                val lazyGridItemInfo = lazyGridState.layoutInfo.visibleItemsInfo.find { itemInfo ->
-                    itemInfo.size.toIntRect().contains(localHitOffset.round() - itemInfo.offset)
-                }
+            val lazyGridItemInfo = lazyGridState.layoutInfo.visibleItemsInfo.find { itemInfo ->
+                itemInfo.size.toIntRect().contains(hitOffset.round() - itemInfo.offset)
+            }
 
-                try {
-                    lazyGridItemInfo?.key?.let { itemInfo ->
-                        val foundKey = itemInfo as Int
-                        selectedPersonItemKey = foundKey
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+            try {
+                lazyGridItemInfo?.key?.let { itemInfo ->
+                    selectedPersonItemKey = itemInfo as Int
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun cancelDragging() {
+        coroutineScope.launch {
+            globalDragOffset.animateTo(Offset.Zero, tween(PICKING_UP_ANIM_TRANSITION_DURATION))
+        }
+        isDraggingCancelled = true
+    }
+
+    fun startDragging(item: TransactionItem, stackedItemList: SnapshotStateList<TransactionItem>) {
+        coroutineScope.launch {
+            if (item.isChecked.value.not()) {
+                item.isChecked.value = true
+                stackedItemList.add(item)
+            }
+            stackedItemList.moveItem(item, 0)
+            pickedItemGlobalOffset = item.itemPositionInFlow
+            globalDragOffset.snapTo(Offset.Zero)
+            isDragStarted = true
+        }
+    }
+
+    fun onLazyGridLayoutPositioned(layoutCoordinates: LayoutCoordinates) {
+        lazyGridLayoutCoordinates ?: run { lazyGridLayoutCoordinates = layoutCoordinates }
+        flowRowHeight ?: run { flowRowHeight = screenHeight - layoutCoordinates.size.height }
+    }
+
+    fun getLocalOffsetOf(offset: Offset): Offset {
+        lazyGridLayoutCoordinates?.let {
+            flowRowLayoutCoordinates?.let {
+                rootLayoutCoordinates?.let {
+                    val localOffset = flowRowLayoutCoordinates!!.localPositionOf(rootLayoutCoordinates!!, offset)
+                    return localOffset
                 }
             }
         }
+        return Offset.Zero
     }
 }
 
@@ -134,22 +174,26 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val config = LocalConfiguration.current
     val density = LocalDensity.current
-    val screenHeight = remember { with(density) { config.screenHeightDp.toDp().toPx() } }
-    var flowRowHeight: Float? = remember { null }
     val personItemList = remember { personList.toMutableStateList() }
     val transactionItemList = remember { transactionList.toMutableStateList() }
     val stackedTransactionItemList = remember { listOf<TransactionItem>().toMutableStateList() }
-    val screenState = remember { ScreenState() }
+    val screenState = remember { ScreenState(scope, config, density) }
     val lazyGridState = rememberLazyGridState()
 
     Column(
-        modifier = modifier.fillMaxSize()
+        modifier = modifier
+            .fillMaxSize()
+            .onGloballyPositioned {
+                if (screenState.rootLayoutCoordinates == null) {
+                    screenState.rootLayoutCoordinates = it
+                }
+            }
     ) {
         Text(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 20.dp),
-            text = "Fair Share new124",
+            text = "Fair Share new173",
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp,
@@ -159,11 +203,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
         LazyVerticalGrid(
             modifier = Modifier
                 .fillMaxWidth()
-                .onGloballyPositioned { coordinates ->
-                    if (screenState.lazyGridLayoutCoordinates == null) {
-                        screenState.lazyGridLayoutCoordinates = coordinates
-                    }
-                },
+                .onGloballyPositioned { screenState.onLazyGridLayoutPositioned(it) },
             state = lazyGridState,
             columns = GridCells.Fixed(3)
         ) {
@@ -196,47 +236,72 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                             alpha = flowItem.itemAlpha.value
                         }
                         .onGloballyPositioned {
-                            if (flowItem.itemPositionInFlow == null) {
-                                flowItem.itemPositionInFlow = it.positionOnScreen()
-                            }
-
-                            if (flowRowHeight == null) {
-                                flowRowHeight = it.size.height - screenHeight
-                            }
+                            flowItem.itemPositionInFlow = it.positionOnScreen() //TODO: CAN BE DELETED
+                            flowItem.itemLayoutCoordinates = it
                         }
                         .pointerInput(Unit) {
                             detectDragGestures(
                                 onDragStart = { _ ->
-                                    scope.launch {
-                                        screenState.isDraggingCancelled = false
-                                        if (flowItem.isChecked.value.not()) {
-                                            flowItem.isChecked.value = true
-                                            stackedTransactionItemList.add(flowItem)
-                                        }
-                                        stackedTransactionItemList.moveItem(flowItem, 0)
-                                        screenState.pickedItemGlobalOffset = flowItem.itemPositionInFlow
-                                        screenState.globalDragOffset.snapTo(Offset.Zero)
-                                        screenState.isDragStarted = true
-                                    }
+                                    screenState.startDragging(flowItem, stackedTransactionItemList)
                                 },
 
                                 onDrag = { change, dragAmount ->
                                     scope.launch {
                                         screenState.globalDragOffset.snapTo(screenState.globalDragOffset.value + dragAmount)
-                                        flowRowHeight?.let {
-                                            if (screenState.globalDragOffset.value.y < it) {
+
+                                        applyWhenAllNotNull(
+                                            screenState.flowRowHeight,
+                                            screenState.lazyGridLayoutCoordinates,
+                                            flowItem.itemLayoutCoordinates
+                                        ) {
+                                            if (screenState.globalDragOffset.value.y < screenState.flowRowHeight!!) {
+                                                val position = screenState.lazyGridLayoutCoordinates!!.localPositionOf(
+                                                    flowItem.itemLayoutCoordinates!!,
+                                                    change.position
+                                                )
                                                 screenState.isInDropBounds = true
-                                                screenState.findItemAtOffset(lazyGridState, change.position)
+                                                screenState.findItemAtOffset(lazyGridState, position)
+                                            } else {
+                                                screenState.isInDropBounds = false
+                                                screenState.selectedPersonItemKey = null
                                             }
                                         }
                                     }
                                 },
 
                                 onDragEnd = {
-                                    scope.launch {
-                                        screenState.globalDragOffset.animateTo(Offset.Zero, tween(PICKING_UP_ANIM_TRANSITION_DURATION))
+                                    if (screenState.isInDropBounds) {
+                                        scope.launch {
+                                            applyWhenAllNotNull(
+                                                screenState.selectedPersonItemKey,
+                                                screenState.flowRowLayoutCoordinates,
+                                                flowItem.itemLayoutCoordinates
+                                            ) {
+                                                val personItem: PersonItem? = personItemList.getIfExist(screenState.selectedPersonItemKey!!)
+                                                var position: Offset = Offset.Zero
+
+                                                if (personItem == null) {
+                                                    screenState.cancelDragging()
+                                                    return@launch
+                                                }
+
+                                                personItem.itemBubbleLayoutCoordinates?.let {
+                                                    position = flowItem.itemLayoutCoordinates!!.localPositionOf(
+                                                        it,
+                                                        it.positionInParent()
+                                                    )
+                                                }
+
+                                                screenState.globalDragOffset.animateTo(
+                                                    position,
+                                                    tween(2000)
+                                                )
+                                            }
+                                        }
+                                        screenState.isItemDropped = true
+                                    } else {
+                                        screenState.cancelDragging()
                                     }
-                                    screenState.isDraggingCancelled = true
                                 }
                             )
                         }
@@ -270,11 +335,18 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                 }
         ) {
             stackedTransactionItemList.reversed().forEachIndexed { index, stackedItem ->
-                transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 0f
-                val tempDragOffset by remember { mutableStateOf(Animatable(stackedItem.itemPositionInFlow ?: Offset.Zero, Offset.VectorConverter)) }
+                scope.launch { transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.snapTo(0f) }
+                val tempDragOffset by remember {
+                    mutableStateOf(
+                        Animatable(
+                            stackedItem.itemPositionInFlow ?: Offset.Zero,
+                            Offset.VectorConverter
+                        )
+                    )
+                }
                 val rotationValue = remember {
                     when {
-                        index == stackedTransactionItemList.size-1 -> 0f
+                        index == stackedTransactionItemList.size - 1 -> 0f
                         index % 2 == 0 -> 7f
                         else -> -7f
                     }
@@ -291,7 +363,8 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                 scope.launch { stackedItem.parentScale.animateTo(1.2f, tween(TRANSACTION_ITEM_SCALE_ANIM_DURATION)) }
                 scope.launch { stackedItem.shadowAlpha.animateTo(1f) }
 
-                Box(
+                TransactionItem(
+                    transactionItem = stackedItem,
                     modifier = Modifier
                         .offset {
                             IntOffset(
@@ -299,26 +372,48 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                                 tempDragOffset.value.y.roundToInt()
                             )
                         }
-                ) {
-                    TransactionItem(transactionItem = stackedItem)
-                }
+                )
 
                 LaunchedEffect(key1 = screenState.isDraggingCancelled) {
                     if (screenState.isDraggingCancelled) {
+                        scope.launch { stackedItem.parentScale.animateTo(1f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
+                        scope.launch { stackedItem.shadowAlpha.animateTo(0f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
+                        stackedItem.itemBorderSize.value = 0.dp
+                        scope.launch { stackedItem.overlayItemRotation.animateTo(0f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
                         scope.launch {
                             tempDragOffset.animateWithResult(
                                 stackedItem.itemPositionInFlow ?: Offset.Zero,
                                 tween(PICKING_UP_ANIM_TRANSITION_DURATION),
                                 onAnimationEnd = {
-                                    transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 1f
-                                    screenState.isDragStarted = false
+                                    scope.launch {
+                                        transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.snapTo(1f)
+                                        screenState.isDragStarted = false
+                                        screenState.selectedPersonItemKey = null
+                                        screenState.isDraggingCancelled = false
+                                        stackedTransactionItemList.clear()
+                                    }
                                 }
                             )
                         }
-                        scope.launch { stackedItem.parentScale.animateTo(1f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
-                        scope.launch { stackedItem.shadowAlpha.animateTo(0f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
-                        stackedItem.itemBorderSize.value = 0.dp
-                        scope.launch { stackedItem.overlayItemRotation.animateTo(0f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
+                    }
+                }
+
+                LaunchedEffect(key1 = screenState.isItemDropped) {
+                    if (screenState.isItemDropped) {
+                        scope.launch { stackedItem.parentScale.animateTo(0f, tween(400)) }
+                        scope.launch {
+                            transactionItemList.remove(stackedItem)
+                            stackedItem.itemAlpha.animateWithResult(
+                                0f,
+                                tween(1800),
+                                onAnimationEnd = {
+                                    screenState.isDragStarted = false
+                                    screenState.isItemDropped = false
+                                    screenState.selectedPersonItemKey = null
+                                    stackedTransactionItemList.clear()
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -345,8 +440,7 @@ private fun PersonItem(
                 if (screenState.boxSize == null) {
                     screenState.boxSize = it.size
                 }
-            },
-        contentAlignment = Alignment.Center
+            }
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -374,10 +468,71 @@ private fun PersonItem(
                 color = Color.Gray
             )
         }
-    }
 
-    item.requestAmount?.let {
         SplitAmountBubble(item)
+    }
+}
+
+@Composable
+fun SplitAmountBubble(
+    item: PersonItem,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(end = 3.dp)
+            .onGloballyPositioned {
+                if (item.itemBubbleLayoutCoordinates == null) {
+                    item.itemBubbleLayoutCoordinates = it
+                }
+            },
+        contentAlignment = Alignment.CenterEnd
+    ) {
+        item.requestAmount?.let {
+            Box(
+                modifier = Modifier
+                    .wrapContentSize()
+                    .padding(top = 13.dp)
+                    .clip(CircleShape)
+                    .background(bubbleColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(vertical = 3.dp, horizontal = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color.White),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            modifier = Modifier
+                                .offset { IntOffset(0, -7) },
+                            text = item.requestAmountCount.toString(),
+                            color = bubbleColor,
+                            textAlign = TextAlign.Center,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Text(
+                        modifier = Modifier
+                            .offset(y = 1.dp),
+                        text = "$${item.requestAmount}",
+                        color = Color.White,
+                        textAlign = TextAlign.Start,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.Light
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -427,7 +582,7 @@ private fun TransactionItem(
             Text(
                 text = "$${transactionItem.transactionAmount}",
                 fontSize = 18.sp,
-                color = transactionItemChipTitleColor
+                color = transactionItemChipAmountColor
             )
 
             Box(
@@ -448,62 +603,6 @@ private fun TransactionItem(
                     painter = painterResource(id = R.drawable.check_circlesvg),
                     contentDescription = "Transaction item checked state",
                     tint = transactionItemChipTitleColor
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun SplitAmountBubble(
-    item: PersonItem,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(end = 3.dp),
-        contentAlignment = Alignment.CenterEnd
-    ) {
-        Box(
-            modifier = Modifier
-                .wrapContentSize()
-                .padding(top = 13.dp)
-                .clip(CircleShape)
-                .background(bubbleColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                modifier = Modifier
-                    .padding(vertical = 3.dp, horizontal = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(Color.White),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        modifier = Modifier
-                            .offset { IntOffset(0, -7) },
-                        text = item.requestAmountCount.toString(),
-                        color = bubbleColor,
-                        textAlign = TextAlign.Center,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Text(
-                    modifier = Modifier
-                        .offset(y = 1.dp),
-                    text = "$${item.requestAmount.toString()}",
-                    color = Color.White,
-                    textAlign = TextAlign.Start,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Light
                 )
             }
         }
@@ -560,6 +659,17 @@ private fun <T> SnapshotStateList<T>.moveItem(item: T, toIndex: Int) {
     }
 }
 
+private fun <T> SnapshotStateList<T>.getIfExist(index: Int): T? {
+    if (isNotEmpty()) {
+        return try {
+            get(index)
+        } catch (e: Exception) {
+            null
+        }
+    }
+    return null
+}
+
 private suspend fun <T, V: AnimationVector> Animatable<T, V>.animateWithResult(
     targetOffset: T,
     animationSpec: AnimationSpec<T>,
@@ -571,10 +681,15 @@ private suspend fun <T, V: AnimationVector> Animatable<T, V>.animateWithResult(
     }
 }
 
-private val bubbleColor: Color = Color("#195FEB".toColorInt())
-private val transactionItemChipColor: Color = Color("#D0E3FC".toColorInt())
-private val transactionItemChipColorDark: Color = Color("#2f5a99".toColorInt())
-private val transactionItemChipTitleColor: Color = Color("#18365B".toColorInt())
+private inline fun applyWhenAllNotNull(vararg values: Any?, action: () -> Unit) {
+    if (values.all { it != null }) action()
+}
+
+private val bubbleColor: Color = Color("#167cff".toColorInt())
+private val transactionItemChipColor: Color = Color("#cbe4fe".toColorInt())
+private val transactionItemChipColorDark: Color = Color("#466e99".toColorInt())
+private val transactionItemChipTitleColor: Color = Color("#06264e".toColorInt())
+private val transactionItemChipAmountColor: Color = Color("#0f335f".toColorInt())
 
 
 
@@ -646,9 +761,9 @@ val personList: List<PersonItem> = listOf(
 )
 val transactionList: List<TransactionItem> = listOf(
     TransactionItem(
-        id = 1,
-        transactionTitle = "Beer",
-        transactionAmount = 9.50,
+        id = 5,
+        transactionTitle = "Bacon Blue Cheese Burger (new receipt)",
+        transactionAmount = 7.99
     ),
     TransactionItem(
         id = 2,
@@ -666,14 +781,14 @@ val transactionList: List<TransactionItem> = listOf(
         transactionAmount = 6.50
     ),
     TransactionItem(
-        id = 5,
-        transactionTitle = "Bacon Blue Cheese Burger (new receipt)",
-        transactionAmount = 7.99
-    ),
-    TransactionItem(
         id = 6,
         transactionTitle = "Fish",
         transactionAmount = 16.99
+    ),
+    TransactionItem(
+        id = 1,
+        transactionTitle = "Beer",
+        transactionAmount = 9.50,
     ),
     TransactionItem(
         id = 7,

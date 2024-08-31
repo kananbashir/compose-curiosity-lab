@@ -1,6 +1,7 @@
 package com.example.compose_curiosity_lab.splitthebill
 
 import androidx.annotation.DrawableRes
+import androidx.compose.ui.layout.LayoutCoordinates
 
 /**
  * Created on 8/9/2024
@@ -14,4 +15,5 @@ data class PersonItem(
     @DrawableRes val photo: Int,
     val requestAmount: Double? = null,
     val requestAmountCount: Int? = null,
+    var itemBubbleLayoutCoordinates: LayoutCoordinates? = null,
 )
