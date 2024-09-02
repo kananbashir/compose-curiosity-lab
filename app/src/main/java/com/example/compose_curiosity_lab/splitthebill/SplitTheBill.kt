@@ -1,9 +1,12 @@
 package com.example.compose_curiosity_lab.splitthebill
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.Transition
+import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateOffset
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,7 +37,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -61,8 +63,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.compose_curiosity_lab.R
-import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 /**
  * Created on 8/9/2024
@@ -91,7 +91,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 20.dp),
-            text = "Fair Share new184",
+            text = "Fair Share new208",
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp,
@@ -158,20 +158,16 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
         }
     }
 
-    if (screenState.isDragStarted) {
+    if (screenState.dragState == ScreenState.DragState.DragStarted) {
         Box(
             modifier = Modifier.offset { screenState.globalDragOffset.value.toIntOffset() }
         ) {
             screenState.stackedTransactionItemList.reversed().forEachIndexed { index, stackedItem ->
-                scope.launch { screenState.transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.snapTo(0f) }
-                val tempDragOffset by remember {
-                    mutableStateOf(
-                        Animatable(
-                            stackedItem.itemPositionInFlow ?: Offset.Zero,
-                            Offset.VectorConverter
-                        )
-                    )
-                }
+                val overlayItemTransition: Transition<ScreenState.ItemState> = updateTransition(
+                    targetState = screenState.itemState,
+                    label = ""
+                )
+
                 val rotationValue = remember {
                     when {
                         index == screenState.stackedTransactionItemList.size - 1 -> 0f
@@ -180,69 +176,66 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
                     }
                 }
 
-                stackedItem.itemBorderSize.value = 1.dp
-                scope.launch {
-                    tempDragOffset.animateTo(
-                        screenState.pickedItemGlobalOffset ?: Offset.Zero,
-                        tween(PICKING_UP_ANIM_TRANSITION_DURATION)
-                    )
+                stackedItem.apply {
+                    screenState.transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 0f
+
+                    dragOffset = overlayItemTransition.animateOffset(label = "") { itemState ->
+                        when (itemState) {
+                            ScreenState.ItemState.Picked -> { screenState.pickedItemGlobalOffset ?: Offset.Zero }
+                            else -> { stackedItem.itemPositionInFlow ?: Offset.Zero } //Abort
+                        }
+                    }
+
+                    overlayItemRotation = overlayItemTransition.animateFloat(label = "", transitionSpec = { tween(PICKING_UP_ANIM_TRANSITION_DURATION) }) { itemState ->
+                        when (itemState) {
+                            ScreenState.ItemState.Picked -> { rotationValue }
+                            else -> { 0f } //Abort
+                        }
+                    }
+
+                    parentScale = overlayItemTransition.animateFloat(label = "", transitionSpec = { tween(PICKING_UP_ANIM_TRANSITION_DURATION) }) { itemState ->
+                        when (itemState) {
+                            ScreenState.ItemState.Picked -> { 1.2f }
+                            ScreenState.ItemState.Abort -> { 1f }
+                            else -> { 0f } //Dropped
+                        }
+                    }
+
+                    shadowAlpha = overlayItemTransition.animateFloat(label = "") { itemState ->
+                        when (itemState) {
+                            ScreenState.ItemState.Picked -> { 1f }
+                            else -> { 0f } //Abort
+                        }
+                    }
+
+                    itemBorderSize = overlayItemTransition.animateDp(label = "") { itemState ->
+                        when (itemState) {
+                            ScreenState.ItemState.Picked -> { 1.dp }
+                            else -> { 0.dp } //Abort
+                        }
+                    }
                 }
-                scope.launch { stackedItem.overlayItemRotation.animateTo(rotationValue, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
-                scope.launch { stackedItem.parentScale.animateTo(1.2f, tween(TRANSACTION_ITEM_SCALE_ANIM_DURATION)) }
-                scope.launch { stackedItem.shadowAlpha.animateTo(1f) }
+
+                LaunchedEffect(key1 = overlayItemTransition.currentState) {
+                    if (overlayItemTransition.isRunning.not()) {
+                        screenState.apply {
+                            if (overlayItemTransition.currentState == ScreenState.ItemState.Abort) {
+                                selectedPersonItemKey = null
+                                transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 1f
+                                itemState = ScreenState.ItemState.Idle
+                                dragState = ScreenState.DragState.Idle
+                            } else if (overlayItemTransition.currentState == ScreenState.ItemState.Dropped) {
+                                transactionItemList.remove(stackedItem)
+                                itemState = ScreenState.ItemState.Idle
+                            }
+                        }
+                    }
+                }
 
                 TransactionItem(
                     transactionItem = stackedItem,
-                    modifier = Modifier
-                        .offset {
-                            IntOffset(
-                                tempDragOffset.value.x.roundToInt(),
-                                tempDragOffset.value.y.roundToInt()
-                            )
-                        }
+                    modifier = Modifier.offset { stackedItem.dragOffset.value.toIntOffset() }
                 )
-
-                LaunchedEffect(key1 = screenState.isDraggingCancelled) {
-                    if (screenState.isDraggingCancelled) {
-                        scope.launch { stackedItem.parentScale.animateTo(1f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
-                        scope.launch { stackedItem.shadowAlpha.animateTo(0f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
-                        stackedItem.itemBorderSize.value = 0.dp
-                        scope.launch { stackedItem.overlayItemRotation.animateTo(0f, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
-                        scope.launch {
-                            tempDragOffset.animateWithResult(
-                                stackedItem.itemPositionInFlow ?: Offset.Zero,
-                                tween(PICKING_UP_ANIM_TRANSITION_DURATION),
-                                onAnimationEnd = {
-                                    scope.launch {
-                                        screenState.transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.snapTo(1f)
-                                        screenState.isDragStarted = false
-                                        screenState.selectedPersonItemKey = null
-                                        screenState.isDraggingCancelled = false
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                LaunchedEffect(key1 = screenState.isItemDropped) {
-                    if (screenState.isItemDropped) {
-                        scope.launch { stackedItem.parentScale.animateTo(0f, tween(400)) }
-                        scope.launch {
-                            screenState.transactionItemList.remove(stackedItem)
-                            stackedItem.itemAlpha.animateWithResult(
-                                0f,
-                                tween(1800),
-                                onAnimationEnd = {
-                                    screenState.isDragStarted = false
-                                    screenState.isItemDropped = false
-                                    screenState.selectedPersonItemKey = null
-                                    screenState.stackedTransactionItemList.clear()
-                                }
-                            )
-                        }
-                    }
-                }
             }
         }
     }

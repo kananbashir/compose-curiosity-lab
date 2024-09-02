@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.toIntRect
 import androidx.core.graphics.toColorInt
 import com.example.compose_curiosity_lab.R
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -31,16 +32,14 @@ import kotlinx.coroutines.launch
 class ScreenState(scope: CoroutineScope, configuration: Configuration, density: Density, lazyGridState: LazyGridState) {
     var pickedItemGlobalOffset by mutableStateOf<Offset?>(null)
     var globalDragOffset by mutableStateOf(Animatable(Offset.Zero, Offset.VectorConverter))
-    var isDragStarted by mutableStateOf(false)
-    var isDraggingCancelled by mutableStateOf(false)
-    var isItemDropped by mutableStateOf(false)
     var boxSize: IntSize? = null
     var selectedPersonItemKey by mutableStateOf<Int?>(null)
     val personItemList  = personList.toMutableStateList()
     val transactionItemList = transactionList.toMutableStateList()
     val stackedTransactionItemList = listOf<TransactionItem>().toMutableStateList()
+    var dragState by mutableStateOf(DragState.Idle)
+    var itemState by mutableStateOf(ItemState.Idle)
     private var pickedTransactionItem: TransactionItem? = null
-    private var isInDropBounds by mutableStateOf(false)
     private var flowRowLayoutCoordinates: LayoutCoordinates? = null
     private var rootLayoutCoordinates: LayoutCoordinates? = null
     private var flowRowHeight: Float? = null
@@ -49,94 +48,97 @@ class ScreenState(scope: CoroutineScope, configuration: Configuration, density: 
     private var coroutineScope: CoroutineScope = scope
     private var gridState = lazyGridState
 
-    fun startDragging(item: TransactionItem) {
-        coroutineScope.launch {
-            pickedTransactionItem = item
+    enum class DragState {
+        Idle,
+        DragStarted
+    }
 
-            if (item.isChecked.value.not()) {
-                item.isChecked.value = true
-                stackedTransactionItemList.add(item)
-            }
-            stackedTransactionItemList.moveItem(item, 0)
-            pickedItemGlobalOffset = item.itemPositionInFlow
-            globalDragOffset.snapTo(Offset.Zero)
-            isDragStarted = true
+    enum class ItemState {
+        Idle,
+        Picked,
+        InDropBounds,
+        Dropped,
+        Abort
+    }
+
+    fun startDragging(item: TransactionItem) {
+        coroutineScope.launch { globalDragOffset.snapTo(Offset.Zero)
+        pickedTransactionItem = item
+        if (item.isChecked.value.not()) {
+            item.isChecked.value = true
+            stackedTransactionItemList.add(item)
+        }
+        stackedTransactionItemList.moveItem(item, 0)
+        pickedItemGlobalOffset = item.itemPositionInFlow
+        dragState = DragState.DragStarted
+        itemState = ItemState.Picked
         }
     }
 
     fun onDrag(dragPosition: Offset, dragAmount: Offset) {
         pickedTransactionItem?.let { item ->
-            coroutineScope.launch {
-                globalDragOffset.snapTo(globalDragOffset.value + dragAmount)
+            coroutineScope.launch { globalDragOffset.snapTo(globalDragOffset.value + dragAmount) }
 
-                applyWhenAllNotNull(
-                    flowRowHeight,
-                    lazyGridLayoutCoordinates,
-                    item.itemLayoutCoordinates
-                ) {
-                    if (globalDragOffset.value.y < flowRowHeight!!) {
-                        val position = lazyGridLayoutCoordinates!!.localPositionOf(
-                            item.itemLayoutCoordinates!!,
-                            dragPosition
-                        )
-                        isInDropBounds = true
-                        findItemAtOffset(position)
-                    } else {
-                        isInDropBounds = false
-                        selectedPersonItemKey = null
-                    }
+            applyWhenAllNotNull(
+                flowRowHeight,
+                lazyGridLayoutCoordinates,
+                item.itemLayoutCoordinates
+            ) {
+                if (globalDragOffset.value.y < flowRowHeight!!) {
+                    val position = lazyGridLayoutCoordinates!!.localPositionOf(
+                        item.itemLayoutCoordinates!!,
+                        dragPosition
+                    )
+                    findItemAtOffset(position)
+                } else {
+                    selectedPersonItemKey = null
                 }
             }
         }
     }
 
     fun endDragging() {
-        when (isInDropBounds) {
-            true -> { dropItem() }
+        when (itemState) {
+            ItemState.InDropBounds -> { dropItem() }
             else -> { cancelDragging() }
         }
     }
 
     private fun dropItem() {
         pickedTransactionItem?.let { item ->
-            coroutineScope.launch {
-                if (selectedPersonItemKey == null) {
-                    cancelDragging()
-                    return@launch
-                }
-
-                applyWhenAllNotNull(
-                    selectedPersonItemKey,
-                    flowRowLayoutCoordinates,
-                    item.itemLayoutCoordinates
-                ) {
-                    //Just to make sure there will be not an IndexOutOfBounds exception..
-                    val personItem: PersonItem? = personItemList.find { it.id == selectedPersonItemKey!! }
-                    var position: Offset = Offset.Zero
-
-                    if (personItem == null) {
-                        cancelDragging()
-                        return@launch
-                    }
-
-                    personItem.itemBubbleLayoutCoordinates?.let {
-                        position = item.itemLayoutCoordinates!!.localPositionOf(it, it.positionInParent())
-                    }
-
-                    globalDragOffset.animateTo(position, tween(2000))
-                }
-                pickedTransactionItem = null
-                isItemDropped = true
+            if (selectedPersonItemKey == null) {
+                cancelDragging()
+                return@let
             }
+
+            applyWhenAllNotNull(
+                selectedPersonItemKey,
+                flowRowLayoutCoordinates,
+                item.itemLayoutCoordinates
+            ) {
+                //Just to make sure there will be not an IndexOutOfBounds exception..
+                val personItem: PersonItem? = personItemList.find { it.id == selectedPersonItemKey!! }
+                var position: Offset = Offset.Zero
+
+                if (personItem == null) {
+                    cancelDragging()
+                    return@let
+                }
+
+                personItem.itemBubbleLayoutCoordinates?.let {
+                    position = item.itemLayoutCoordinates!!.localPositionOf(it, it.positionInParent())
+                }
+                coroutineScope.launch { globalDragOffset.animateTo(position, tween(2000)) }
+            }
+            pickedTransactionItem = null
+            dragState = DragState.Idle
         }
     }
 
     private fun cancelDragging() {
-        coroutineScope.launch {
-            globalDragOffset.animateTo(Offset.Zero, tween(PICKING_UP_ANIM_TRANSITION_DURATION))
-        }
+        coroutineScope.launch { globalDragOffset.animateTo(Offset.Zero, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
         pickedTransactionItem = null
-        isDraggingCancelled = true
+        itemState = ItemState.Abort
     }
 
     fun onFlowRowItemClicked(item: TransactionItem) {
