@@ -1,3 +1,6 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
@@ -6,6 +9,27 @@ plugins {
 android {
     namespace = "com.example.compose_curiosity_lab"
     compileSdk = 34
+
+
+    signingConfigs {
+        create("release") {
+            keyAlias = "key0"
+            keyPassword = "compose"
+            storeFile = file("key.jks")
+            storePassword = "compose"
+        }
+    }
+
+    applicationVariants.all {
+        val variant = this
+        variant.outputs.map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd")
+                val issueDate = dateFormat.format(Date())
+                val outputFileName = "curiosity_lab_${variant.versionName}_$issueDate.apk"
+                output.outputFileName = outputFileName
+            }
+    }
 
     defaultConfig {
         applicationId = "com.example.compose_curiosity_lab"
@@ -24,6 +48,7 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -37,7 +62,7 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
     packaging {
         resources {
