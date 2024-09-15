@@ -1,11 +1,13 @@
 package com.example.compose_curiosity_lab.splitthebill
 
-import androidx.compose.animation.core.Transition
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateOffset
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -37,6 +39,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -59,9 +63,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.example.compose_curiosity_lab.R
 
 /**
@@ -69,9 +75,12 @@ import com.example.compose_curiosity_lab.R
  * @author Kanan Bashir
  */
 
-const val PICKING_UP_ANIM_TRANSITION_DURATION = 300
-const val TRANSACTION_ITEM_SCALE_ANIM_DURATION = 100
-const val PERSON_ITEM_SCALE_ANIM_DURATION = 800
+const val STIFFNESS_TRANSACTION_ITEM = 80f
+const val STIFFNESS_PERSON_ITEM = 30f
+val springFloatPersonItem: FiniteAnimationSpec<Float> = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = STIFFNESS_PERSON_ITEM)
+val springFloat: FiniteAnimationSpec<Float> = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = STIFFNESS_TRANSACTION_ITEM)
+val springOffset: FiniteAnimationSpec<Offset> = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = STIFFNESS_TRANSACTION_ITEM)
+val springDp: FiniteAnimationSpec<Dp> = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = STIFFNESS_TRANSACTION_ITEM)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -91,7 +100,7 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 20.dp),
-            text = "Fair Share new208",
+            text = "Fair Share new",
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp,
@@ -123,119 +132,127 @@ fun SplitTheBill(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            screenState.transactionItemList.forEachIndexed { _, flowItem ->
-                Box(
-                    modifier = Modifier
-                        .graphicsLayer {
-                            alpha = flowItem.itemAlpha.value
-                        }
-                        .onGloballyPositioned { screenState.onFlowRowItemPositioned(flowItem, it) }
-                        .pointerInput(Unit) {
-                            detectDragGestures(
-                                onDragStart = { _ ->
-                                    screenState.startDragging(flowItem)
-                                },
+            screenState.transactionItemList.forEach { flowItem ->
+                //Using key composable to properly update flow row when the list updates.
+                //Otherwise it could cache a state even an item is deleted.
+                key(flowItem.id) {
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                alpha = flowItem.itemAlpha.value
+                            }
+                            .onGloballyPositioned { screenState.onFlowRowItemPositioned(flowItem, it) }
+                            .pointerInput(Unit) {
+                                detectDragGestures(
+                                    onDragStart = { _ ->
+                                        screenState.startDragging(flowItem)
+                                    },
 
-                                onDrag = { change, dragAmount ->
-                                    screenState.onDrag(change.position, dragAmount)
-                                },
+                                    onDrag = { change, dragAmount ->
+                                        screenState.onDrag(change.position, dragAmount)
+                                    },
 
-                                onDragEnd = {
-                                    screenState.endDragging()
-                                }
-                            )
-                        }
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            screenState.onFlowRowItemClicked(flowItem)
-                        },
-                ) {
-                    TransactionItem(flowItem)
+                                    onDragEnd = {
+                                        screenState.endDragging()
+                                    }
+                                )
+                            }
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                screenState.onFlowRowItemClicked(flowItem)
+                            },
+                    ) {
+                        TransactionItem(flowItem)
+                    }
                 }
             }
         }
     }
 
-    if (screenState.dragState == ScreenState.DragState.DragStarted) {
-        Box(
-            modifier = Modifier.offset { screenState.globalDragOffset.value.toIntOffset() }
-        ) {
-            screenState.stackedTransactionItemList.reversed().forEachIndexed { index, stackedItem ->
-                val overlayItemTransition: Transition<ScreenState.ItemState> = updateTransition(
-                    targetState = screenState.itemState,
-                    label = ""
-                )
+    Box(
+        modifier = Modifier
+            .graphicsLayer { alpha = if (screenState.dragState == ScreenState.DragState.DragStarted) 1f else 0f }
+            .offset { screenState.globalDragOffset.value.toIntOffset() }
+    ) {
+        val overlayItemTransition = updateTransition(
+            targetState = screenState.itemState,
+            label = "overlayItemTransition"
+        )
 
-                val rotationValue = remember {
-                    when {
-                        index == screenState.stackedTransactionItemList.size - 1 -> 0f
-                        index % 2 == 0 -> 7f
-                        else -> -7f
-                    }
+        screenState.stackedTransactionItemList.forEachIndexed { index, stackedItem ->
+            key (stackedItem.id){
+                val itemDragOffset by remember {
+                    mutableStateOf(
+                        Animatable(
+                            stackedItem.itemPositionInFlow ?: Offset.Zero,
+                            Offset.VectorConverter
+                        )
+                    )
                 }
 
                 stackedItem.apply {
-                    screenState.transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 0f
-
-                    dragOffset = overlayItemTransition.animateOffset(label = "") { itemState ->
+                    overlayItemRotation = overlayItemTransition.animateFloat(
+                        label = "overlayItemRotation",
+                        transitionSpec = { springFloat }
+                    ) { itemState ->
                         when (itemState) {
-                            ScreenState.ItemState.Picked -> { screenState.pickedItemGlobalOffset ?: Offset.Zero }
-                            else -> { stackedItem.itemPositionInFlow ?: Offset.Zero } //Abort
+                            ScreenState.ItemState.Picked -> screenState.getRotationValue(index)
+                            else -> 0f
                         }
                     }
 
-                    overlayItemRotation = overlayItemTransition.animateFloat(label = "", transitionSpec = { tween(PICKING_UP_ANIM_TRANSITION_DURATION) }) { itemState ->
+                    parentScale = overlayItemTransition.animateFloat(
+                        label = "parentScale",
+                        transitionSpec = { springFloat }
+                    ) { itemState ->
                         when (itemState) {
-                            ScreenState.ItemState.Picked -> { rotationValue }
-                            else -> { 0f } //Abort
+                            ScreenState.ItemState.Picked -> 1.2f
+                            ScreenState.ItemState.Idle -> 1f
+                            else -> 0f //Dropped
                         }
                     }
 
-                    parentScale = overlayItemTransition.animateFloat(label = "", transitionSpec = { tween(PICKING_UP_ANIM_TRANSITION_DURATION) }) { itemState ->
+                    shadowAlpha = overlayItemTransition.animateFloat(
+                        label = "shadowAlpha",
+                        transitionSpec = { springFloat }
+                    ) { itemState ->
                         when (itemState) {
-                            ScreenState.ItemState.Picked -> { 1.2f }
-                            ScreenState.ItemState.Abort -> { 1f }
-                            else -> { 0f } //Dropped
+                            ScreenState.ItemState.Picked -> 1f
+                            else -> 0f
                         }
                     }
 
-                    shadowAlpha = overlayItemTransition.animateFloat(label = "") { itemState ->
+                    itemBorderSize = overlayItemTransition.animateDp(
+                        label = "itemBorderSize",
+                        transitionSpec = { springDp }
+                    ) { itemState ->
                         when (itemState) {
-                            ScreenState.ItemState.Picked -> { 1f }
-                            else -> { 0f } //Abort
+                            ScreenState.ItemState.Picked -> 1.dp
+                            else -> 0.dp
                         }
                     }
 
-                    itemBorderSize = overlayItemTransition.animateDp(label = "") { itemState ->
-                        when (itemState) {
-                            ScreenState.ItemState.Picked -> { 1.dp }
-                            else -> { 0.dp } //Abort
+                    TransactionItem(
+                        transactionItem = stackedItem,
+                        modifier = Modifier
+                            .zIndex(stackedItem.overlayItemZIndex)
+                            .offset { itemDragOffset.value.toIntOffset() }
+                    )
+
+                    //For some reason, the drag animation doesn't work with update transition. So, I decided
+                    // to use the traditional way..
+                    LaunchedEffect(key1 = screenState.itemState) {
+                        val offset = when (screenState.itemState) {
+                            ScreenState.ItemState.Picked -> screenState.pickedItemGlobalOffset ?: Offset.Zero
+                            ScreenState.ItemState.Idle -> stackedItem.itemPositionInFlow ?: Offset.Zero
+                            else -> return@LaunchedEffect
                         }
+
+                        itemDragOffset.animateTo(offset, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = STIFFNESS_TRANSACTION_ITEM))
                     }
                 }
-
-                LaunchedEffect(key1 = overlayItemTransition.currentState) {
-                    if (overlayItemTransition.isRunning.not()) {
-                        screenState.apply {
-                            if (overlayItemTransition.currentState == ScreenState.ItemState.Abort) {
-                                selectedPersonItemKey = null
-                                transactionItemList.find { it.id == stackedItem.id }?.itemAlpha?.value = 1f
-                                itemState = ScreenState.ItemState.Idle
-                                dragState = ScreenState.DragState.Idle
-                            } else if (overlayItemTransition.currentState == ScreenState.ItemState.Dropped) {
-                                transactionItemList.remove(stackedItem)
-                                itemState = ScreenState.ItemState.Idle
-                            }
-                        }
-                    }
-                }
-
-                TransactionItem(
-                    transactionItem = stackedItem,
-                    modifier = Modifier.offset { stackedItem.dragOffset.value.toIntOffset() }
-                )
             }
         }
     }
@@ -249,18 +266,12 @@ private fun PersonItem(
 ) {
     val itemScale by animateFloatAsState(
         targetValue = if (screenState.selectedPersonItemKey == item.id) 1.1f else 1f,
-        animationSpec = tween(PERSON_ITEM_SCALE_ANIM_DURATION),
+        animationSpec = springFloatPersonItem,
         label = ""
     )
 
     Box(
-        modifier = modifier
-            .scale(itemScale)
-            .onGloballyPositioned {
-                if (screenState.boxSize == null) {
-                    screenState.boxSize = it.size
-                }
-            }
+        modifier = modifier.scale(itemScale)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,

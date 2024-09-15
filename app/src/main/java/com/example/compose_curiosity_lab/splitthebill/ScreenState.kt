@@ -3,7 +3,6 @@ package com.example.compose_curiosity_lab.splitthebill
 import android.content.res.Configuration
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,13 +14,11 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.toIntRect
 import androidx.core.graphics.toColorInt
 import com.example.compose_curiosity_lab.R
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -32,13 +29,14 @@ import kotlinx.coroutines.launch
 class ScreenState(scope: CoroutineScope, configuration: Configuration, density: Density, lazyGridState: LazyGridState) {
     var pickedItemGlobalOffset by mutableStateOf<Offset?>(null)
     var globalDragOffset by mutableStateOf(Animatable(Offset.Zero, Offset.VectorConverter))
-    var boxSize: IntSize? = null
     var selectedPersonItemKey by mutableStateOf<Int?>(null)
     val personItemList  = personList.toMutableStateList()
     val transactionItemList = transactionList.toMutableStateList()
     val stackedTransactionItemList = listOf<TransactionItem>().toMutableStateList()
-    var dragState by mutableStateOf(DragState.Idle)
     var itemState by mutableStateOf(ItemState.Idle)
+    var dragState by mutableStateOf(DragState.Idle)
+    private var higherIndex = -1f
+    private var dropState by mutableStateOf(DropState.Idle)
     private var pickedTransactionItem: TransactionItem? = null
     private var flowRowLayoutCoordinates: LayoutCoordinates? = null
     private var rootLayoutCoordinates: LayoutCoordinates? = null
@@ -50,29 +48,33 @@ class ScreenState(scope: CoroutineScope, configuration: Configuration, density: 
 
     enum class DragState {
         Idle,
-        DragStarted
+        DragStarted;
     }
 
     enum class ItemState {
         Idle,
         Picked,
-        InDropBounds,
-        Dropped,
-        Abort
+        Dropped;
+    }
+
+    enum class DropState {
+        Idle,
+        InDropBounds;
     }
 
     fun startDragging(item: TransactionItem) {
-        coroutineScope.launch { globalDragOffset.snapTo(Offset.Zero)
-        pickedTransactionItem = item
+        if (item.overlayItemZIndex != higherIndex) item.overlayItemZIndex = higherIndex++
         if (item.isChecked.value.not()) {
             item.isChecked.value = true
             stackedTransactionItemList.add(item)
         }
-        stackedTransactionItemList.moveItem(item, 0)
+
+        handlePickedItemsAlphas(0f)
+        coroutineScope.launch { globalDragOffset.snapTo(Offset.Zero) }
+        pickedTransactionItem = item
         pickedItemGlobalOffset = item.itemPositionInFlow
         dragState = DragState.DragStarted
         itemState = ItemState.Picked
-        }
     }
 
     fun onDrag(dragPosition: Offset, dragAmount: Offset) {
@@ -92,62 +94,94 @@ class ScreenState(scope: CoroutineScope, configuration: Configuration, density: 
                     findItemAtOffset(position)
                 } else {
                     selectedPersonItemKey = null
+                    dropState = DropState.Idle
                 }
             }
         }
     }
 
     fun endDragging() {
-        when (itemState) {
-            ItemState.InDropBounds -> { dropItem() }
-            else -> { cancelDragging() }
+        when (dropState) {
+            DropState.InDropBounds -> dropItem()
+            else -> cancelDragging()
         }
     }
 
     private fun dropItem() {
-        pickedTransactionItem?.let { item ->
-            if (selectedPersonItemKey == null) {
-                cancelDragging()
-                return@let
-            }
-
-            applyWhenAllNotNull(
-                selectedPersonItemKey,
-                flowRowLayoutCoordinates,
-                item.itemLayoutCoordinates
-            ) {
-                //Just to make sure there will be not an IndexOutOfBounds exception..
-                val personItem: PersonItem? = personItemList.find { it.id == selectedPersonItemKey!! }
-                var position: Offset = Offset.Zero
-
-                if (personItem == null) {
+        coroutineScope.launch {
+            pickedTransactionItem?.let { item ->
+                if (selectedPersonItemKey == null) {
                     cancelDragging()
                     return@let
                 }
 
-                personItem.itemBubbleLayoutCoordinates?.let {
-                    position = item.itemLayoutCoordinates!!.localPositionOf(it, it.positionInParent())
+                applyWhenAllNotNull(
+                    selectedPersonItemKey,
+                    flowRowLayoutCoordinates,
+                    item.itemLayoutCoordinates
+                ) {
+                    //Just to make sure there will be not an IndexOutOfBounds exception..
+                    val personItem: PersonItem? = personItemList.find { it.id == selectedPersonItemKey!! }
+                    var position: Offset = Offset.Zero
+
+                    if (personItem == null) {
+                        cancelDragging()
+                        return@let
+                    }
+
+                    personItem.itemBubbleLayoutCoordinates?.let {
+                        position = item.itemLayoutCoordinates!!.localPositionOf(it, it.positionInParent())
+                    }
+                    itemState = ItemState.Dropped
+                    globalDragOffset.animateWithResult(position, springOffset,
+                        onAnimationEnd = {
+                            transactionItemList.removeAll(stackedTransactionItemList)
+                            resetValues()
+                        })
                 }
-                coroutineScope.launch { globalDragOffset.animateTo(position, tween(2000)) }
             }
-            pickedTransactionItem = null
-            dragState = DragState.Idle
         }
     }
 
     private fun cancelDragging() {
-        coroutineScope.launch { globalDragOffset.animateTo(Offset.Zero, tween(PICKING_UP_ANIM_TRANSITION_DURATION)) }
+        coroutineScope.launch {
+            globalDragOffset.animateWithResult(Offset.Zero, springOffset,
+                onAnimationEnd = {
+                    handlePickedItemsAlphas(1f)
+                    dragState = DragState.Idle
+                }
+            )
+        }
+        itemState = ItemState.Idle
+    }
+
+    private fun resetValues() {
         pickedTransactionItem = null
-        itemState = ItemState.Abort
+        pickedItemGlobalOffset = null
+        selectedPersonItemKey = null
+        dragState = DragState.Idle
+        itemState = ItemState.Idle
+        dropState = DropState.Idle
+        stackedTransactionItemList.clear()
+        higherIndex = -1f
+    }
+
+    private fun handlePickedItemsAlphas(alpha: Float) {
+        stackedTransactionItemList.forEach { item ->
+            transactionItemList.find { it.id == item.id }?.itemAlpha?.value = alpha
+        }
     }
 
     fun onFlowRowItemClicked(item: TransactionItem) {
-        if (item.isChecked.value.not()) {
-            item.isChecked.value = true
-            stackedTransactionItemList.add(item)
-        } else {
-            item.isChecked.value = false
-            stackedTransactionItemList.remove(item)
+        item.apply {
+            if (isChecked.value.not()) {
+                isChecked.value = true
+                overlayItemZIndex = higherIndex++
+                stackedTransactionItemList.add(item)
+            } else {
+                isChecked.value = false
+                stackedTransactionItemList.remove(item)
+            }
         }
     }
 
@@ -161,12 +195,15 @@ class ScreenState(scope: CoroutineScope, configuration: Configuration, density: 
     }
 
     fun onFlowRowPositioned(layoutCoordinates: LayoutCoordinates) {
-        flowRowLayoutCoordinates ?: run { flowRowLayoutCoordinates = layoutCoordinates }
+        flowRowLayoutCoordinates = layoutCoordinates
     }
 
     fun onFlowRowItemPositioned(flowItem: TransactionItem, layoutCoordinates: LayoutCoordinates) {
-        flowItem.itemLayoutCoordinates = layoutCoordinates
-        flowItem.itemPositionInFlow = layoutCoordinates.positionOnScreen() //TODO: CAN BE DELETED
+        flowItem.apply {
+            itemLayoutCoordinates = layoutCoordinates
+            itemPositionInFlow = layoutCoordinates.positionOnScreen()
+            dragOffset = mutableStateOf(itemPositionInFlow!!)
+        }
     }
 
     private fun findItemAtOffset(hitOffset: Offset) {
@@ -176,12 +213,23 @@ class ScreenState(scope: CoroutineScope, configuration: Configuration, density: 
             }
 
             try {
-                lazyGridItemInfo?.key?.let { itemInfo ->
-                    selectedPersonItemKey = itemInfo as Int
+                if (lazyGridItemInfo?.key != null) {
+                    selectedPersonItemKey = lazyGridItemInfo.key as Int
+                    dropState = DropState.InDropBounds
+                } else {
+                    dropState = DropState.Idle
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+        }
+    }
+
+    fun getRotationValue(index: Int): Float {
+        return when {
+            index == stackedTransactionItemList.size - 1 -> 0f
+            index % 2 == 0 -> 7f
+            else -> -7f
         }
     }
 }

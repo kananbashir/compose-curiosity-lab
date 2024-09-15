@@ -5,7 +5,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationEndReason
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.AnimationVector
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -63,13 +62,6 @@ fun Modifier.shadow(
         }
     }
 )
-
-fun <T> SnapshotStateList<T>.moveItem(item: T, toIndex: Int) {
-    if (isNotEmpty() && indexOf(item) != 0) {
-        remove(item)
-        add(toIndex, item)
-    }
-}
 
 suspend inline fun <T, V: AnimationVector> Animatable<T, V>.animateWithResult(
     targetOffset: T,

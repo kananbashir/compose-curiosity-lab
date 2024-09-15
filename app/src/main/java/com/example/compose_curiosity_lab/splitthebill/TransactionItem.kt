@@ -27,5 +27,6 @@ data class TransactionItem(
     var shadowAlpha: State<Float> = mutableFloatStateOf(0f),
     var overlayItemRotation: State<Float> = mutableFloatStateOf(0f),
     var itemBorderSize: State<Dp> = mutableStateOf(0.dp),
-    var itemLayoutCoordinates: LayoutCoordinates? = null
+    var itemLayoutCoordinates: LayoutCoordinates? = null,
+    var overlayItemZIndex: Float = -1f
 )
