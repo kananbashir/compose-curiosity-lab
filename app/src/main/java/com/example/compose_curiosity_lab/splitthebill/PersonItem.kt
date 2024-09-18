@@ -1,6 +1,9 @@
 package com.example.compose_curiosity_lab.splitthebill
 
 import androidx.annotation.DrawableRes
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.layout.LayoutCoordinates
 
 /**
@@ -13,7 +16,7 @@ data class PersonItem(
     val name: String,
     val surname: String,
     @DrawableRes val photo: Int,
-    val requestAmount: Double? = null,
-    val requestAmountCount: Int? = null,
+    var requestAmount: MutableState<Double> = mutableDoubleStateOf(0.0),
+    var requestAmountCount: MutableState<Int> = mutableIntStateOf(0),
     var itemBubbleLayoutCoordinates: LayoutCoordinates? = null,
 )

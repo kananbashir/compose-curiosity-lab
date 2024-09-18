@@ -1,6 +1,9 @@
 package com.example.compose_curiosity_lab.splitthebill
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
@@ -8,7 +11,14 @@ import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -300,27 +310,32 @@ private fun PersonItem(
             )
         }
 
-        SplitAmountBubble(item)
+        SplitAmountBubble(item, screenState)
     }
 }
 
 @Composable
 fun SplitAmountBubble(
     item: PersonItem,
+    screenState: ScreenState,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(end = 3.dp)
-            .onGloballyPositioned {
-                if (item.itemBubbleLayoutCoordinates == null) {
-                    item.itemBubbleLayoutCoordinates = it
-                }
-            },
+            .onGloballyPositioned { screenState.onSplitAmountBubblePositioned(item, it) },
         contentAlignment = Alignment.CenterEnd
     ) {
-        item.requestAmount?.let {
+        AnimatedVisibility(
+            visible = item.requestAmount.value != 0.0,
+            enter = scaleIn(
+                animationSpec = tween(delayMillis = 350, easing = FastOutSlowInEasing),
+            ) + fadeIn(
+                animationSpec = tween(durationMillis = 500, delayMillis = 400, easing = FastOutSlowInEasing)
+            ),
+            exit = scaleOut() + fadeOut()
+        ) {
             Box(
                 modifier = Modifier
                     .wrapContentSize()
@@ -342,25 +357,39 @@ fun SplitAmountBubble(
                             .background(Color.White),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            modifier = Modifier
-                                .offset { IntOffset(0, -7) },
-                            text = item.requestAmountCount.toString(),
-                            color = bubbleColor,
-                            textAlign = TextAlign.Center,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        AnimatedContent(
+                            targetState = item.requestAmountCount.value,
+                            transitionSpec = { slideInVertically(
+                                animationSpec = tween(400, easing = FastOutSlowInEasing)
+                            ).togetherWith(fadeOut(tween(200, delayMillis = 200))) },
+                            label = "requestAmountCount"
+                        ) { state ->
+                            Text(
+                                modifier = Modifier.offset { IntOffset(0, -7) },
+                                text = state.toString(),
+                                color = bubbleColor,
+                                textAlign = TextAlign.Center,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
-                    Text(
-                        modifier = Modifier
-                            .offset(y = 1.dp),
-                        text = "$${item.requestAmount}",
-                        color = Color.White,
-                        textAlign = TextAlign.Start,
-                        overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.Light
-                    )
+                    AnimatedContent(
+                        targetState = item.requestAmount.value,
+                        transitionSpec = { slideInVertically(
+                            animationSpec = tween(400, easing = FastOutSlowInEasing)
+                        ).togetherWith(fadeOut(tween(200, delayMillis = 200))) },
+                        label = "requestAmount"
+                    ) { state ->
+                        Text(
+                            modifier = Modifier.offset(y = 1.dp),
+                            text = "$$state",
+                            color = Color.White,
+                            textAlign = TextAlign.Start,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = FontWeight.Light
+                        )
+                    }
                 }
             }
         }

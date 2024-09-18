@@ -20,6 +20,8 @@ import androidx.core.graphics.toColorInt
 import com.example.compose_curiosity_lab.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 /**
  * Created on 8/31/2024
@@ -133,11 +135,23 @@ class ScreenState(scope: CoroutineScope, configuration: Configuration, density: 
                         position = item.itemLayoutCoordinates!!.localPositionOf(it, it.positionInParent())
                     }
                     itemState = ItemState.Dropped
-                    globalDragOffset.animateWithResult(position, springOffset,
-                        onAnimationEnd = {
-                            transactionItemList.removeAll(stackedTransactionItemList)
-                            resetValues()
-                        })
+                    launch {
+                        personItem.apply {
+                            requestAmount.value = BigDecimal(requestAmount.value)
+                                .add(stackedTransactionItemList.getTotalTransactionAmount())
+                                .setScale(2, RoundingMode.HALF_EVEN)
+                                .toDouble()
+
+                            requestAmountCount.value = BigDecimal(requestAmountCount.value)
+                                .add(BigDecimal(stackedTransactionItemList.size))
+                                .setScale(2, RoundingMode.HALF_EVEN)
+                                .toBigInteger().toInt()
+                        }
+                    }
+                    selectedPersonItemKey = null
+                    transactionItemList.removeAll(stackedTransactionItemList)
+                    globalDragOffset.animateTo(position, springOffset)
+                    resetValues()
                 }
             }
         }
@@ -158,7 +172,6 @@ class ScreenState(scope: CoroutineScope, configuration: Configuration, density: 
     private fun resetValues() {
         pickedTransactionItem = null
         pickedItemGlobalOffset = null
-        selectedPersonItemKey = null
         dragState = DragState.Idle
         itemState = ItemState.Idle
         dropState = DropState.Idle
@@ -204,6 +217,10 @@ class ScreenState(scope: CoroutineScope, configuration: Configuration, density: 
             itemPositionInFlow = layoutCoordinates.positionOnScreen()
             dragOffset = mutableStateOf(itemPositionInFlow!!)
         }
+    }
+
+    fun onSplitAmountBubblePositioned(personItem: PersonItem, layoutCoordinates: LayoutCoordinates) {
+        personItem.itemBubbleLayoutCoordinates = layoutCoordinates
     }
 
     private fun findItemAtOffset(hitOffset: Offset) {
@@ -254,8 +271,6 @@ val personList: List<PersonItem> = listOf(
         name = "Sofia",
         surname = "Hernandez",
         photo = R.drawable.stb_photo_sofia,
-        requestAmount = 20.48,
-        requestAmountCount = 3
     ),
 
     PersonItem(
@@ -270,8 +285,6 @@ val personList: List<PersonItem> = listOf(
         name = "Olivia",
         surname = "Garcia",
         photo = R.drawable.stb_photo_olivia,
-        requestAmount = 12.99,
-        requestAmountCount = 2
     ),
 
     PersonItem(

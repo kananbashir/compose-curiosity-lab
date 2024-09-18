@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationEndReason
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.AnimationVector
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -15,6 +16,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import java.math.BigDecimal
+import java.math.RoundingMode
 import kotlin.math.roundToInt
 
 /**
@@ -62,6 +65,12 @@ fun Modifier.shadow(
         }
     }
 )
+
+fun SnapshotStateList<TransactionItem>.getTotalTransactionAmount(): BigDecimal {
+    var totalAmount = 0.0
+    forEach { totalAmount += it.transactionAmount }
+    return BigDecimal(totalAmount).setScale(2, RoundingMode.HALF_EVEN)
+}
 
 suspend inline fun <T, V: AnimationVector> Animatable<T, V>.animateWithResult(
     targetOffset: T,
