@@ -186,6 +186,7 @@ class ScreenState(scope: CoroutineScope, configuration: Configuration, density: 
     }
 
     fun onFlowRowItemClicked(item: TransactionItem) {
+        if (dragState != DragState.Idle) return
         item.apply {
             if (isChecked.value.not()) {
                 isChecked.value = true
@@ -310,9 +311,9 @@ val personList: List<PersonItem> = listOf(
 )
 val transactionList: List<TransactionItem> = listOf(
     TransactionItem(
-        id = 5,
-        transactionTitle = "Bacon Blue Cheese Burger (new receipt)",
-        transactionAmount = 7.99
+        id = 1,
+        transactionTitle = "Beer",
+        transactionAmount = 9.50,
     ),
     TransactionItem(
         id = 2,
@@ -335,9 +336,9 @@ val transactionList: List<TransactionItem> = listOf(
         transactionAmount = 16.99
     ),
     TransactionItem(
-        id = 1,
-        transactionTitle = "Beer",
-        transactionAmount = 9.50,
+        id = 5,
+        transactionTitle = "Bacon Blue Cheese Burger (new receipt)",
+        transactionAmount = 7.99
     ),
     TransactionItem(
         id = 7,

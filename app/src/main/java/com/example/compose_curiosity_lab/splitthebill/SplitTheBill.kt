@@ -330,9 +330,9 @@ fun SplitAmountBubble(
         AnimatedVisibility(
             visible = item.requestAmount.value != 0.0,
             enter = scaleIn(
-                animationSpec = tween(delayMillis = 350, easing = FastOutSlowInEasing),
+                animationSpec = tween(delayMillis = 250, easing = FastOutSlowInEasing),
             ) + fadeIn(
-                animationSpec = tween(durationMillis = 500, delayMillis = 400, easing = FastOutSlowInEasing)
+                animationSpec = tween(durationMillis = 300, delayMillis = 100, easing = FastOutSlowInEasing)
             ),
             exit = scaleOut() + fadeOut()
         ) {
@@ -361,7 +361,7 @@ fun SplitAmountBubble(
                             targetState = item.requestAmountCount.value,
                             transitionSpec = { slideInVertically(
                                 animationSpec = tween(400, easing = FastOutSlowInEasing)
-                            ).togetherWith(fadeOut(tween(200, delayMillis = 200))) },
+                            ).togetherWith(fadeOut(tween(200))) },
                             label = "requestAmountCount"
                         ) { state ->
                             Text(
@@ -378,7 +378,7 @@ fun SplitAmountBubble(
                         targetState = item.requestAmount.value,
                         transitionSpec = { slideInVertically(
                             animationSpec = tween(400, easing = FastOutSlowInEasing)
-                        ).togetherWith(fadeOut(tween(200, delayMillis = 200))) },
+                        ).togetherWith(fadeOut(tween(200))) },
                         label = "requestAmount"
                     ) { state ->
                         Text(
